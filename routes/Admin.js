@@ -1,13 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const Seller = require('../models/Seller');
+const Order = require('../models/Order');
+const Wallet = require('../models/Wallet');
 
 // Middleware to check admin role
 const restrictToAdmin = (req, res, next) => {
   if (!req.seller || req.seller.role !== 'ADMIN') {
-    return res.status(403).render('error', { 
+    return res.status(403).render('error', {
       title: 'Access Denied',
-      message: 'Access Denied: Admins Only' 
+      message: 'Access Denied: Admins Only'
     });
   }
   next();
@@ -59,46 +61,47 @@ router.get('/', restrictToAdmin, async (req, res) => {
       rejected: await Seller.countDocuments({ verificationStatus: 'Rejected', isGoogleUser: false })
     };
 
-    let Product, Order;
+    let Product, OrderModel;
     try { Product = require('../models/Product'); } catch (e) { Product = null; }
-    try { Order = require('../models/Order'); } catch (e) { Order = null; }
+    try { OrderModel = require('../models/Order'); } catch (e) { OrderModel = null; }
 
     let recentOrders = [];
     let topProducts = [];
-    let revenueData = [];
-    let orderStatusData = { labels: [], data: [] };
+    let totalRevenue = 0;
+    let totalOrdersCount = 0;
 
-    if (Product) {
-      recentOrders = await Product.find()
+    if (OrderModel) {
+      recentOrders = await OrderModel.find()
         .sort({ createdAt: -1 })
         .limit(10)
+        .populate('seller', 'businessName')
         .lean();
 
+      totalOrdersCount = await OrderModel.countDocuments();
+
+      const revenueAgg = await OrderModel.aggregate([
+        { $match: { paymentStatus: 'paid' } },
+        { $group: { _id: null, total: { $sum: '$totalAmount' } } }
+      ]);
+      totalRevenue = revenueAgg[0]?.total || 0;
+    }
+
+    if (Product) {
       topProducts = await Product.find()
-        .sort({ revenue: -1 })
+        .sort({ totalRevenue: -1 })
         .limit(10)
         .lean();
-
-      const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      revenueData = days.map((day, i) => ({
-        label: day,
-        value: Math.floor(40000 + Math.random() * 40000)
-      }));
-
-      orderStatusData = {
-        labels: ['Delivered', 'Pending', 'Processing', 'Cancelled', 'Returned'],
-        data: [
-          await Product.countDocuments({ status: 'delivered' }),
-          await Product.countDocuments({ status: 'pending' }),
-          await Product.countDocuments({ status: 'processing' }),
-          await Product.countDocuments({ status: 'cancelled' }),
-          await Product.countDocuments({ status: 'returned' })
-        ]
-      };
-      if (orderStatusData.data.every(v => v === 0)) {
-        orderStatusData.data = [45, 20, 25, 7, 3];
-      }
     }
+
+    // Get pending payout count
+    const pendingPayoutCount = await Wallet.countDocuments({
+      'transactions': {
+        $elemMatch: {
+          type: 'payout_request',
+          status: 'pending'
+        }
+      }
+    });
 
     res.render('adminDashboard', {
       title: 'Admin Dashboard - SellerHub',
@@ -111,14 +114,16 @@ router.get('/', restrictToAdmin, async (req, res) => {
       stats,
       recentOrders,
       topProducts,
-      revenueData,
-      orderStatusData
+      totalRevenue,
+      totalOrdersCount,
+      pendingPayoutCount,
+      formatTimeAgo
     });
   } catch (error) {
     console.error("❌ Admin Dashboard Error:", error.message);
-    res.status(500).render('error', { 
+    res.status(500).render('error', {
       title: 'Error',
-      message: 'Internal Server Error' 
+      message: 'Internal Server Error'
     });
   }
 });
@@ -173,9 +178,9 @@ router.get('/sellers', restrictToAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Sellers Page Error:", error.message);
-    res.status(500).render('error', { 
+    res.status(500).render('error', {
       title: 'Error',
-      message: 'Internal Server Error' 
+      message: 'Internal Server Error'
     });
   }
 });
@@ -192,6 +197,9 @@ router.post('/sellers/:id/approve', restrictToAdmin, async (req, res) => {
     seller.approvedBy = req.seller._id;
     seller.approvedAt = new Date();
     await seller.save();
+
+    // Create wallet for approved seller if not exists
+    await Wallet.getOrCreate(seller._id);
 
     res.json({
       success: true,
@@ -245,7 +253,19 @@ router.get('/sellers/:id', restrictToAdmin, async (req, res) => {
     if (!seller) {
       return res.status(404).json({ success: false, message: "Seller not found" });
     }
-    res.json({ success: true, seller });
+
+    // Get seller wallet
+    const wallet = await Wallet.findOne({ seller: seller._id }).lean();
+
+    // Get seller orders count
+    const orderCount = await Order.countDocuments({ seller: seller._id });
+
+    res.json({ 
+      success: true, 
+      seller,
+      wallet: wallet || null,
+      orderCount
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -254,9 +274,6 @@ router.get('/sellers/:id', restrictToAdmin, async (req, res) => {
 // ====================== GET ADMIN ORDERS PAGE ======================
 router.get('/orders', restrictToAdmin, async (req, res) => {
   try {
-    let Order;
-    try { Order = require('../models/Order'); } catch (e) { Order = null; }
-
     const page = parseInt(req.query.page) || 1;
     const limit = 20;
     const skip = (page - 1) * limit;
@@ -264,47 +281,44 @@ router.get('/orders', restrictToAdmin, async (req, res) => {
     const sort = req.query.sort || 'newest';
     const search = req.query.search || '';
 
-    let orders = [];
-    let totalOrders = 0;
-    let stats = { total: 0, pending: 0, processing: 0, delivered: 0, cancelled: 0 };
-
-    if (Order) {
-      let query = {};
-      if (status) query.status = status;
-      if (search) {
-        query.$or = [
-          { orderNumber: { $regex: search, $options: 'i' } },
-          { customerName: { $regex: search, $options: 'i' } },
-          { customerEmail: { $regex: search, $options: 'i' } }
-        ];
-      }
-
-      let sortOption = { createdAt: -1 };
-      if (sort === 'oldest') sortOption = { createdAt: 1 };
-      if (sort === 'amount-high') sortOption = { totalAmount: -1 };
-      if (sort === 'amount-low') sortOption = { totalAmount: 1 };
-
-      [orders, totalOrders] = await Promise.all([
-        Order.find(query).sort(sortOption).skip(skip).limit(limit).lean(),
-        Order.countDocuments(query)
-      ]);
-
-      const statAgg = await Order.aggregate([
-        { $group: {
-          _id: null,
-          total: { $sum: 1 },
-          pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
-          processing: { $sum: { $cond: [{ $in: ['$status', ['confirmed', 'processing', 'shipped']] }, 1, 0] } },
-          delivered: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] } },
-          cancelled: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } }
-        }}
-      ]);
-
-      if (statAgg && statAgg[0]) {
-        stats = statAgg[0];
-      }
+    let query = {};
+    if (status) query.status = status;
+    if (search) {
+      query.$or = [
+        { orderNumber: { $regex: search, $options: 'i' } },
+        { customerName: { $regex: search, $options: 'i' } },
+        { customerEmail: { $regex: search, $options: 'i' } }
+      ];
     }
 
+    let sortOption = { createdAt: -1 };
+    if (sort === 'oldest') sortOption = { createdAt: 1 };
+    if (sort === 'amount-high') sortOption = { totalAmount: -1 };
+    if (sort === 'amount-low') sortOption = { totalAmount: 1 };
+
+    const [orders, totalOrders] = await Promise.all([
+      Order.find(query)
+        .sort(sortOption)
+        .skip(skip)
+        .limit(limit)
+        .populate('seller', 'businessName email')
+        .lean(),
+      Order.countDocuments(query)
+    ]);
+
+    const statAgg = await Order.aggregate([
+      { $group: {
+        _id: null,
+        total: { $sum: 1 },
+        pending: { $sum: { $cond: [{ $eq: ['$status', 'pending'] }, 1, 0] } },
+        processing: { $sum: { $cond: [{ $in: ['$status', ['confirmed', 'processing', 'shipped']] }, 1, 0] } },
+        delivered: { $sum: { $cond: [{ $eq: ['$status', 'delivered'] }, 1, 0] } },
+        cancelled: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
+        totalRevenue: { $sum: '$totalAmount' }
+      }}
+    ]);
+
+    let stats = statAgg && statAgg[0] ? statAgg[0] : {};
     const totalPages = Math.ceil(totalOrders / limit);
 
     res.render('adminOrders', {
@@ -325,21 +339,118 @@ router.get('/orders', restrictToAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Orders Page Error:", error.message);
-    res.status(500).render('error', { 
+    res.status(500).render('error', {
       title: 'Error',
-      message: 'Failed to load orders' 
+      message: 'Failed to load orders'
     });
+  }
+});
+
+// ====================== GET SINGLE ORDER DETAILS (ADMIN FULL VIEW) ======================
+router.get('/orders/:id', restrictToAdmin, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id)
+      .populate('seller', 'businessName email phoneNumber')
+      .lean();
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    res.json({ success: true, order });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ====================== REJECT ORDER (ADMIN) ======================
+router.post('/orders/:id/reject', restrictToAdmin, async (req, res) => {
+  try {
+    const { reason } = req.body;
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    order.status = 'cancelled';
+    order.cancelledAt = new Date();
+    order.cancelReason = reason || 'Rejected by admin';
+    order.adminAction.rejectedAt = new Date();
+    order.adminAction.rejectedBy = req.seller._id;
+    order.adminAction.rejectionReason = reason || 'Rejected by admin';
+    order.statusHistory.push({
+      status: 'cancelled',
+      note: reason || 'Order rejected by admin',
+      updatedBy: req.seller._id,
+      updatedByRole: 'ADMIN'
+    });
+
+    await order.save();
+
+    // Process refund if payment was made
+    if (order.paymentStatus === 'paid') {
+      order.paymentStatus = 'refunded';
+      order.paymentDetails.refundedAt = new Date();
+      order.paymentDetails.refundAmount = order.totalAmount;
+      order.paymentDetails.refundReason = reason || 'Order rejected by admin';
+      await order.save();
+    }
+
+    res.json({ success: true, message: 'Order rejected and refunded if paid', order });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ====================== REFUND ORDER (ADMIN) ======================
+router.post('/orders/:id/refund', restrictToAdmin, async (req, res) => {
+  try {
+    const { amount, reason } = req.body;
+    const order = await Order.findById(req.params.id);
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    if (order.paymentStatus !== 'paid') {
+      return res.status(400).json({ success: false, message: 'Order is not paid' });
+    }
+
+    const refundAmount = amount || order.totalAmount;
+
+    order.paymentStatus = 'refunded';
+    order.paymentDetails.refundedAt = new Date();
+    order.paymentDetails.refundAmount = refundAmount;
+    order.paymentDetails.refundReason = reason || 'Admin refund';
+    order.adminAction.refundedAt = new Date();
+    order.adminAction.refundedBy = req.seller._id;
+    order.adminAction.refundReason = reason || 'Admin refund';
+    order.status = 'refunded';
+    order.statusHistory.push({
+      status: 'refunded',
+      note: `Refunded Rs.${refundAmount}. Reason: ${reason || 'Admin refund'}`,
+      updatedBy: req.seller._id,
+      updatedByRole: 'ADMIN'
+    });
+
+    await order.save();
+
+    // Deduct from seller wallet if funds were already released
+    if (order.fundsReleased) {
+      const wallet = await Wallet.getOrCreate(order.seller);
+      await wallet.addTransaction('refund', order.sellerEarnings, `Refund for order ${order.orderNumber}`, { order: order._id });
+    }
+
+    res.json({ success: true, message: 'Order refunded successfully', order });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
 // ====================== UPDATE ORDER STATUS (ADMIN) ======================
 router.post('/orders/:id/status', restrictToAdmin, async (req, res) => {
   try {
-    let Order;
-    try { Order = require('../models/Order'); } catch (e) {
-      return res.status(500).json({ success: false, message: 'Order module not available' });
-    }
-
     const { status, note } = req.body;
     const validStatuses = ['pending', 'confirmed', 'processing', 'shipped', 'out_for_delivery', 'delivered', 'cancelled'];
 
@@ -358,6 +469,7 @@ router.post('/orders/:id/status', restrictToAdmin, async (req, res) => {
       status,
       note: note || `Status changed to ${status} by admin`,
       updatedBy: req.seller._id,
+      updatedByRole: 'ADMIN',
       updatedAt: new Date()
     });
 
@@ -438,9 +550,9 @@ router.get('/products', restrictToAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Products Page Error:", error.message);
-    res.status(500).render('error', { 
+    res.status(500).render('error', {
       title: 'Error',
-      message: 'Failed to load products' 
+      message: 'Failed to load products'
     });
   }
 });
@@ -461,10 +573,10 @@ router.post('/products/:id/toggle-status', restrictToAdmin, async (req, res) => 
     product.status = product.status === 'active' ? 'inactive' : 'active';
     await product.save();
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       message: `Product ${product.status === 'active' ? 'activated' : 'deactivated'}`,
-      status: product.status 
+      status: product.status
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -484,7 +596,6 @@ router.post('/products/:id/delete', restrictToAdmin, async (req, res) => {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
-    // Decrement seller's product count
     if (product.seller) {
       await Seller.findByIdAndUpdate(product.seller, { $inc: { totalProducts: -1 } });
     }
@@ -495,120 +606,260 @@ router.post('/products/:id/delete', restrictToAdmin, async (req, res) => {
   }
 });
 
-// ====================== GET ADMIN ACTIVITY PAGE ======================
-router.get('/activity', restrictToAdmin, async (req, res) => {
+// ====================== GET ADMIN PAYMENTS/PAYOUTS PAGE ======================
+router.get('/payments', restrictToAdmin, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = 20;
     const skip = (page - 1) * limit;
-    const type = req.query.type || '';
-    const time = req.query.time || 'today';
+    const status = req.query.status || 'pending';
     const search = req.query.search || '';
 
-    // Build time filter
-    let timeFilter = {};
-    const now = new Date();
-    if (time === 'today') {
-      timeFilter = { createdAt: { $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()) } };
-    } else if (time === 'yesterday') {
-      const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
-      timeFilter = { createdAt: { $gte: new Date(yesterday.getFullYear(), yesterday.getMonth(), yesterday.getDate()), $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate()) } };
-    } else if (time === 'week') {
-      const weekAgo = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
-      timeFilter = { createdAt: { $gte: weekAgo } };
-    } else if (time === 'month') {
-      timeFilter = { createdAt: { $gte: new Date(now.getFullYear(), now.getMonth(), 1) } };
-    }
+    // Find all wallets with pending/approved payout transactions
+    const wallets = await Wallet.find({
+      'transactions.type': { $in: ['payout_request', 'payout_approved', 'payout_rejected'] }
+    }).populate('seller', 'fullName email businessName phoneNumber bankAccountNumber ifscCode');
 
-    // Mock activities (replace with real Activity model when ready)
-    const mockActivities = [
-      { type: 'order', icon: 'shopping-cart', title: 'New Order Received', description: 'Order #ORD-7842 placed by Rahul Sharma for ₹2,499', user: 'Rahul Sharma', entity: 'Order #ORD-7842', amount: 2499, createdAt: new Date(Date.now() - 2 * 60000), badge: 'New', badgeType: 'success' },
-      { type: 'user', icon: 'user-plus', title: 'New Seller Registration', description: 'Fashion Hub Store completed registration and is awaiting approval', user: 'Fashion Hub', entity: 'Seller Registration', createdAt: new Date(Date.now() - 15 * 60000), badge: 'Pending', badgeType: 'warning' },
-      { type: 'product', icon: 'box', title: 'Product Added', description: 'Men\'s Cotton Kurta was added to the catalog by Trendy Wear', user: 'Trendy Wear', entity: 'Men\'s Cotton Kurta', createdAt: new Date(Date.now() - 60 * 60000) },
-      { type: 'review', icon: 'star', title: 'New 5-Star Review', description: 'Premium T-Shirt received a 5-star review from verified buyer', user: 'Verified Buyer', entity: 'Premium T-Shirt', createdAt: new Date(Date.now() - 3 * 60 * 60000) },
-      { type: 'order', icon: 'check-circle', title: 'Order Delivered', description: 'Order #ORD-7839 was successfully delivered to Priya Patel', user: 'Priya Patel', entity: 'Order #ORD-7839', amount: 1899, createdAt: new Date(Date.now() - 5 * 60 * 60000), badge: 'Completed', badgeType: 'success' },
-      { type: 'payment', icon: 'credit-card', title: 'Payout Processed', description: '₹15,420 payout processed to Electronics World', user: 'Electronics World', entity: 'Payout #PAY-4521', amount: 15420, createdAt: new Date(Date.now() - 6 * 60 * 60000) },
-      { type: 'system', icon: 'cog', title: 'System Update', description: 'Platform maintenance completed successfully. All systems operational.', entity: 'System', createdAt: new Date(Date.now() - 8 * 60 * 60000) },
-      { type: 'order', icon: 'times-circle', title: 'Order Cancelled', description: 'Order #ORD-7835 was cancelled by customer request', user: 'Customer', entity: 'Order #ORD-7835', amount: 899, createdAt: new Date(Date.now() - 12 * 60 * 60000), badge: 'Cancelled', badgeType: 'danger' },
-      { type: 'user', icon: 'user-check', title: 'Seller Approved', description: 'Gadget Zone seller application was approved by admin', user: 'Gadget Zone', entity: 'Seller Approval', createdAt: new Date(Date.now() - 14 * 60 * 60000), badge: 'Approved', badgeType: 'success' },
-      { type: 'product', icon: 'edit', title: 'Product Updated', description: 'Wireless Earbuds price updated from ₹1,999 to ₹1,499', user: 'Tech Store', entity: 'Wireless Earbuds', createdAt: new Date(Date.now() - 16 * 60 * 60000) }
-    ];
+    let allPayouts = [];
+    wallets.forEach(wallet => {
+      wallet.transactions.forEach(tx => {
+        if (['payout_request', 'payout_approved', 'payout_rejected'].includes(tx.type)) {
+          if (status === 'all' || tx.status === status || (status === 'pending' && tx.type === 'payout_request' && tx.status === 'pending')) {
+            allPayouts.push({
+              _id: tx._id,
+              seller: wallet.seller,
+              sellerId: wallet.seller._id,
+              amount: tx.amount,
+              type: tx.type,
+              status: tx.status,
+              method: tx.payoutMethod?.type || 'bank_transfer',
+              bankDetails: {
+                accountNumber: tx.payoutMethod?.bankAccountNumber || wallet.seller.bankAccountNumber || '',
+                ifsc: tx.payoutMethod?.bankIfsc || wallet.seller.ifscCode || '',
+                upiId: tx.payoutMethod?.upiId || ''
+              },
+              requestedAt: tx.createdAt,
+              processedAt: tx.processedAt,
+              processedBy: tx.processedBy,
+              rejectionReason: tx.rejectionReason
+            });
+          }
+        }
+      });
+    });
 
-    let activities = mockActivities;
-    let totalActivities = activities.length;
+    // Sort by date
+    allPayouts.sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt));
 
-    // Apply type filter
-    if (type) {
-      activities = activities.filter(a => a.type === type);
-      totalActivities = activities.length;
-    }
-
-    // Apply search filter
+    // Search filter
     if (search) {
       const searchLower = search.toLowerCase();
-      activities = activities.filter(a => 
-        (a.title && a.title.toLowerCase().includes(searchLower)) ||
-        (a.description && a.description.toLowerCase().includes(searchLower)) ||
-        (a.user && a.user.toLowerCase().includes(searchLower))
+      allPayouts = allPayouts.filter(p => 
+        p.seller.fullName?.toLowerCase().includes(searchLower) ||
+        p.seller.email?.toLowerCase().includes(searchLower) ||
+        p.seller.businessName?.toLowerCase().includes(searchLower)
       );
-      totalActivities = activities.length;
     }
 
-    // Pagination for mock data
-    activities = activities.slice(skip, skip + limit);
-    const totalPages = Math.ceil(totalActivities / limit);
+    const totalPayouts = allPayouts.length;
+    const totalPages = Math.ceil(totalPayouts / limit);
+    const paginatedPayouts = allPayouts.slice(skip, skip + limit);
 
     // Stats
     const stats = {
-      today: mockActivities.filter(a => new Date(a.createdAt) > new Date(now.getFullYear(), now.getMonth(), now.getDate())).length,
-      orders: mockActivities.filter(a => a.type === 'order').length,
-      sellers: mockActivities.filter(a => a.type === 'user').length,
-      products: mockActivities.filter(a => a.type === 'product').length
+      total: allPayouts.length,
+      pending: allPayouts.filter(p => p.status === 'pending').length,
+      approved: allPayouts.filter(p => p.type === 'payout_approved').length,
+      rejected: allPayouts.filter(p => p.type === 'payout_rejected').length,
+      totalAmount: allPayouts.reduce((sum, p) => sum + (p.status === 'pending' ? p.amount : 0), 0)
     };
 
-    // Active users (mock)
-    const activeUsers = [
-      { name: 'Rahul Sharma', email: 'rahul@example.com', role: 'CUSTOMER', actionCount: 12, lastActive: new Date(Date.now() - 5 * 60000), avatar: '/images/default-avatar.png' },
-      { name: 'Fashion Hub', email: 'contact@fashionhub.com', role: 'SELLER', actionCount: 8, lastActive: new Date(Date.now() - 15 * 60000), avatar: '/images/default-shop.png' },
-      { name: 'Admin User', email: 'admin@shopp123.com', role: 'ADMIN', actionCount: 45, lastActive: new Date(Date.now() - 2 * 60000), avatar: '/images/admin-avatar.png' },
-      { name: 'Priya Patel', email: 'priya@example.com', role: 'CUSTOMER', actionCount: 6, lastActive: new Date(Date.now() - 30 * 60000), avatar: '/images/default-avatar.png' }
-    ];
+    res.render('adminPayments', {
+      title: 'Seller Payments - Admin',
+      user: req.seller,
+      admin: req.seller,
+      payouts: paginatedPayouts,
+      stats,
+      currentPage: page,
+      totalPages,
+      totalPayouts,
+      hasNext: page < totalPages,
+      hasPrev: page > 1,
+      currentStatus: status,
+      searchQuery: search
+    });
+  } catch (error) {
+    console.error("❌ Payments Page Error:", error.message);
+    res.status(500).render('error', {
+      title: 'Error',
+      message: 'Failed to load payments'
+    });
+  }
+});
+
+// ====================== APPROVE PAYOUT (ADMIN) ======================
+router.post('/payments/:walletId/payout/:transactionId/approve', restrictToAdmin, async (req, res) => {
+  try {
+    const { transactionId, walletId } = req.params;
+    const { referenceNumber, notes } = req.body;
+
+    const wallet = await Wallet.findById(walletId);
+    if (!wallet) {
+      return res.status(404).json({ success: false, message: 'Wallet not found' });
+    }
+
+    const transaction = wallet.transactions.id(transactionId);
+    if (!transaction) {
+      return res.status(404).json({ success: false, message: 'Transaction not found' });
+    }
+
+    if (transaction.type !== 'payout_request' || transaction.status !== 'pending') {
+      return res.status(400).json({ success: false, message: 'Invalid transaction status' });
+    }
+
+    // Update transaction to approved
+    transaction.type = 'payout_approved';
+    transaction.status = 'completed';
+    transaction.processedBy = req.seller._id;
+    transaction.processedAt = new Date();
+    transaction.description = `Payout approved. Ref: ${referenceNumber || 'N/A'}. ${notes || ''}`;
+
+    await wallet.save();
+
+    res.json({
+      success: true,
+      message: 'Payout approved and marked as paid',
+      payout: {
+        id: transaction._id,
+        amount: transaction.amount,
+        status: 'completed',
+        processedAt: transaction.processedAt
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ====================== REJECT PAYOUT (ADMIN) ======================
+router.post('/payments/:walletId/payout/:transactionId/reject', restrictToAdmin, async (req, res) => {
+  try {
+    const { transactionId, walletId } = req.params;
+    const { reason } = req.body;
+
+    const wallet = await Wallet.findById(walletId);
+    if (!wallet) {
+      return res.status(404).json({ success: false, message: 'Wallet not found' });
+    }
+
+    const transaction = wallet.transactions.id(transactionId);
+    if (!transaction) {
+      return res.status(404).json({ success: false, message: 'Transaction not found' });
+    }
+
+    if (transaction.type !== 'payout_request' || transaction.status !== 'pending') {
+      return res.status(400).json({ success: false, message: 'Invalid transaction status' });
+    }
+
+    // Return amount to available balance
+    wallet.availableBalance += transaction.amount;
+
+    // Update transaction to rejected
+    transaction.type = 'payout_rejected';
+    transaction.status = 'cancelled';
+    transaction.processedBy = req.seller._id;
+    transaction.processedAt = new Date();
+    transaction.rejectionReason = reason || 'Rejected by admin';
+    transaction.description = `Payout rejected. Reason: ${reason || 'Rejected by admin'}`;
+
+    await wallet.save();
+
+    res.json({
+      success: true,
+      message: 'Payout rejected. Amount returned to seller wallet.',
+      payout: {
+        id: transaction._id,
+        amount: transaction.amount,
+        status: 'cancelled',
+        rejectionReason: transaction.rejectionReason
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ====================== GET ADMIN ACTIVITY PAGE ======================
+router.get('/activity', restrictToAdmin, async (req, res) => {
+  try {
+    // Get real recent orders
+    const recentOrders = await Order.find()
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .populate('seller', 'businessName')
+      .lean();
+
+    // Get real recent seller registrations
+    const recentSellers = await Seller.find()
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .lean();
+
+    // Build real activity feed
+    let activities = [];
+
+    recentOrders.forEach(order => {
+      activities.push({
+        type: 'order',
+        icon: 'shopping-cart',
+        title: `New Order ${order.orderNumber}`,
+        description: `Order from ${order.customerName} for Rs.${order.totalAmount}`,
+        user: order.seller?.businessName || 'Unknown Seller',
+        entity: order.orderNumber,
+        amount: order.totalAmount,
+        createdAt: order.createdAt,
+        badge: order.status === 'pending' ? 'New' : order.status,
+        badgeType: order.status === 'delivered' ? 'success' : order.status === 'cancelled' ? 'danger' : 'warning'
+      });
+    });
+
+    recentSellers.forEach(seller => {
+      activities.push({
+        type: 'user',
+        icon: 'user-plus',
+        title: 'New Seller Registration',
+        description: `${seller.businessName || seller.fullName} completed registration`,
+        user: seller.fullName,
+        entity: 'Seller Registration',
+        createdAt: seller.createdAt,
+        badge: seller.verificationStatus,
+        badgeType: seller.verificationStatus === 'Approved' ? 'success' : 'warning'
+      });
+    });
+
+    // Sort by date
+    activities.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    const stats = {
+      today: activities.filter(a => new Date(a.createdAt) > new Date(new Date().setHours(0,0,0,0))).length,
+      orders: activities.filter(a => a.type === 'order').length,
+      sellers: activities.filter(a => a.type === 'user').length
+    };
 
     res.render('adminActivity', {
       title: 'Activity Feed - Admin',
       user: req.seller,
       admin: req.seller,
-      activities,
-      activeUsers,
+      activities: activities.slice(0, 20),
       stats,
-      currentPage: page,
-      totalPages,
-      totalActivities,
-      limit,
-      hasNext: page < totalPages,
-      hasPrev: page > 1,
-      currentType: type,
-      currentTime: time,
-      searchQuery: search,
       formatTimeAgo
     });
   } catch (error) {
     console.error("❌ Activity Page Error:", error.message);
-    res.status(500).render('error', { 
+    res.status(500).render('error', {
       title: 'Error',
-      message: 'Failed to load activity feed' 
+      message: 'Failed to load activity feed'
     });
-  }
-});
-
-// ====================== GET LATEST ACTIVITIES API (for auto-refresh) ======================
-router.get('/activity/api/latest', restrictToAdmin, async (req, res) => {
-  try {
-    // Return count of new activities since last check
-    // In production, this would query your Activity/Log collection
-    res.json({ success: true, newCount: 0 });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
   }
 });
 
@@ -622,9 +873,9 @@ router.get('/settings', restrictToAdmin, async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Settings Page Error:", error.message);
-    res.status(500).render('error', { 
+    res.status(500).render('error', {
       title: 'Error',
-      message: 'Failed to load settings' 
+      message: 'Failed to load settings'
     });
   }
 });
