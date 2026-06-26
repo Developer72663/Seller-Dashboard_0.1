@@ -1,11 +1,8 @@
 const express = require('express');
 const router = express.Router();
-
-// Models
-let Seller, Product, Order;
-try { Seller = require('../models/Seller'); } catch(e) { Seller = null; }
-try { Product = require('../models/Product'); } catch(e) { Product = null; }
-try { Order = require('../models/Order'); } catch(e) { Order = null; }
+const Seller = require('../models/Seller');
+const Order = require('../models/Order');
+const Wallet = require('../models/Wallet');
 
 // ===================== AUTH MIDDLEWARE =====================
 const requireSellerAuth = async (req, res, next) => {
@@ -27,16 +24,18 @@ const requireSellerAuth = async (req, res, next) => {
 };
 
 // ===================== EARNINGS PAGE =====================
-// GET /seller/earnings/ (mounted at /seller/earnings in app.js)
 router.get('/', requireSellerAuth, async (req, res) => {
   try {
     const sellerId = req.sellerData._id;
     const seller = req.sellerData;
 
+    // Get or create wallet
+    const wallet = await Wallet.getOrCreate(sellerId);
+
+    // Calculate stats from orders
     let totalRevenue = 0;
     let thisMonthRevenue = 0;
     let pendingAmount = 0;
-    let availableBalance = 0;
     let totalOrders = 0;
     let totalProducts = 0;
     let earningsHistory = [];
@@ -44,75 +43,77 @@ router.get('/', requireSellerAuth, async (req, res) => {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    if (Order) {
-      const orders = await Order.find({ seller: sellerId }).lean();
-      totalOrders = orders.length;
+    const orders = await Order.find({ seller: sellerId }).lean();
+    totalOrders = orders.length;
 
-      orders.forEach(order => {
-        const orderTotal = order.totalAmount || order.grandTotal || 0;
-        totalRevenue += orderTotal;
+    orders.forEach(order => {
+      const orderTotal = order.sellerEarnings || 0;
+      totalRevenue += orderTotal;
 
-        const orderDate = new Date(order.createdAt);
-        if (orderDate >= startOfMonth) {
-          thisMonthRevenue += orderTotal;
-        }
-
-        if (order.status === 'delivered') {
-          availableBalance += orderTotal;
-        } else if (['pending', 'confirmed', 'processing', 'shipped'].includes(order.status)) {
-          pendingAmount += orderTotal;
-        }
-      });
-
-      // Build earnings history (last 12 months)
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const monthlyData = {};
-
-      orders.forEach(order => {
-        const d = new Date(order.createdAt);
-        const key = `${months[d.getMonth()]} ${d.getFullYear()}`;
-        if (!monthlyData[key]) monthlyData[key] = 0;
-        monthlyData[key] += order.totalAmount || 0;
-      });
-
-      // Get last 6 months
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-        const key = `${months[d.getMonth()]} ${d.getFullYear()}`;
-        earningsHistory.push({
-          month: key,
-          amount: monthlyData[key] || 0,
-          orders: orders.filter(o => {
-            const od = new Date(o.createdAt);
-            return od.getMonth() === d.getMonth() && od.getFullYear() === d.getFullYear();
-          }).length
-        });
+      const orderDate = new Date(order.createdAt);
+      if (orderDate >= startOfMonth) {
+        thisMonthRevenue += orderTotal;
       }
+
+      if (order.status === 'delivered' && !order.fundsReleased) {
+        pendingAmount += orderTotal;
+      }
+    });
+
+    // Build earnings history (last 6 months)
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const monthlyData = {};
+
+    orders.forEach(order => {
+      const d = new Date(order.createdAt);
+      const key = `${months[d.getMonth()]} ${d.getFullYear()}`;
+      if (!monthlyData[key]) monthlyData[key] = { amount: 0, orders: 0 };
+      monthlyData[key].amount += order.sellerEarnings || 0;
+      monthlyData[key].orders += 1;
+    });
+
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${months[d.getMonth()]} ${d.getFullYear()}`;
+      earningsHistory.push({
+        month: key,
+        amount: monthlyData[key]?.amount || 0,
+        orders: monthlyData[key]?.orders || 0
+      });
     }
 
+    // Get product count
+    let Product;
+    try { Product = require('../models/Product'); } catch(e) { Product = null; }
     if (Product) {
       totalProducts = await Product.countDocuments({ seller: sellerId });
     }
 
-    // Calculate commission (assume 10% platform fee)
-    const platformFee = totalRevenue * 0.10;
-    const netEarnings = totalRevenue - platformFee;
+    // Get pending payout requests
+    const pendingPayouts = wallet.transactions.filter(
+      t => t.type === 'payout_request' && t.status === 'pending'
+    );
 
     res.render('sellerEarnings', {
       title: 'Earnings - SellerHub',
       seller: seller,
+      wallet: wallet,
       stats: {
         totalRevenue,
         thisMonthRevenue,
         pendingAmount,
-        availableBalance: Math.max(0, availableBalance - platformFee),
+        availableBalance: wallet.availableBalance,
+        pendingBalance: wallet.pendingBalance,
         totalOrders,
         totalProducts,
-        platformFee,
-        netEarnings
+        platformFeeRate: 10,
+        netEarnings: wallet.totalEarned
       },
       earningsHistory,
-      currency: '₹'
+      pendingPayouts,
+      payoutSettings: wallet.payoutSettings,
+      currency: '₹',
+      minPayout: 1000
     });
   } catch (err) {
     console.error('Earnings error:', err);
@@ -124,56 +125,94 @@ router.get('/', requireSellerAuth, async (req, res) => {
 });
 
 // ===================== REQUEST PAYOUT =====================
-// POST /seller/earnings/payout
 router.post('/payout', requireSellerAuth, async (req, res) => {
   try {
     const { amount, method, accountDetails } = req.body;
     const sellerId = req.sellerData._id;
+    const MIN_PAYOUT = 1000;
 
-    const minPayout = 500;
-    if (!amount || amount < minPayout) {
+    const amountNum = parseFloat(amount);
+    if (!amountNum || isNaN(amountNum) || amountNum < MIN_PAYOUT) {
       return res.status(400).json({
         success: false,
-        message: `Minimum payout amount is ₹${minPayout}`
+        message: `Minimum payout amount is ₹${MIN_PAYOUT}`
       });
     }
 
-    console.log(`Payout request: Seller ${sellerId}, Amount: ${amount}, Method: ${method}`);
+    const wallet = await Wallet.getOrCreate(sellerId);
+
+    // Update payout settings if provided
+    if (accountDetails) {
+      if (accountDetails.bankAccountNumber) wallet.payoutSettings.bankAccountNumber = accountDetails.bankAccountNumber;
+      if (accountDetails.bankIfsc) wallet.payoutSettings.bankIfsc = accountDetails.bankIfsc;
+      if (accountDetails.bankAccountName) wallet.payoutSettings.bankAccountName = accountDetails.bankAccountName;
+      if (accountDetails.bankName) wallet.payoutSettings.bankName = accountDetails.bankName;
+      if (accountDetails.upiId) wallet.payoutSettings.upiId = accountDetails.upiId;
+      if (method) wallet.payoutSettings.preferredMethod = method;
+    }
+
+    // Request payout
+    const transaction = await wallet.requestPayout(amountNum, {
+      type: method || wallet.payoutSettings.preferredMethod,
+      bankAccountNumber: wallet.payoutSettings.bankAccountNumber,
+      bankIfsc: wallet.payoutSettings.bankIfsc,
+      upiId: wallet.payoutSettings.upiId
+    });
 
     res.json({
       success: true,
-      message: 'Payout request submitted successfully. You will receive the amount within 3-5 business days.',
-      payoutId: 'PAY-' + Date.now()
+      message: 'Payout request submitted successfully. Admin will process it within 3-5 business days.',
+      payoutId: transaction._id,
+      amount: amountNum,
+      status: 'pending'
     });
   } catch (err) {
     console.error('Payout error:', err);
     res.status(500).json({
       success: false,
-      message: 'Failed to process payout request'
+      message: err.message || 'Failed to process payout request'
     });
   }
 });
 
+// ===================== GET PAYOUT HISTORY =====================
+router.get('/payouts', requireSellerAuth, async (req, res) => {
+  try {
+    const sellerId = req.sellerData._id;
+    const wallet = await Wallet.getOrCreate(sellerId);
+
+    const payouts = wallet.transactions
+      .filter(t => ['payout_request', 'payout_approved', 'payout_rejected'].includes(t.type))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    res.json({
+      success: true,
+      payouts
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // ===================== EARNINGS API (JSON) =====================
-// GET /seller/earnings/api/summary
 router.get('/api/summary', requireSellerAuth, async (req, res) => {
   try {
     const sellerId = req.sellerData._id;
+    const wallet = await Wallet.getOrCreate(sellerId);
 
-    let totalRevenue = 0;
-    let totalOrders = 0;
-
-    if (Order) {
-      const orders = await Order.find({ seller: sellerId }).lean();
-      totalOrders = orders.length;
-      totalRevenue = orders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
-    }
+    const orders = await Order.find({ seller: sellerId }).lean();
+    const totalRevenue = orders.reduce((sum, o) => sum + (o.sellerEarnings || 0), 0);
+    const totalOrders = orders.length;
 
     res.json({
       success: true,
       data: {
         totalRevenue,
         totalOrders,
+        availableBalance: wallet.availableBalance,
+        pendingBalance: wallet.pendingBalance,
+        totalEarned: wallet.totalEarned,
+        totalWithdrawn: wallet.totalWithdrawn,
         currency: '₹'
       }
     });
