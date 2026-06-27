@@ -1,347 +1,537 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>My Orders - SellerHub</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <style>
-    :root { --primary: #2874f0; --success: #388e3c; --warning: #f9a825; --danger: #d32f2f; --info: #0288d1; --bg: #f1f3f6; }
-    body { background: var(--bg); font-family: 'Segoe UI', sans-serif; }
-    .top-bar { background: white; padding: 15px 30px; border-bottom: 1px solid #ddd; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-    .top-bar h4 { margin: 0; font-weight: 700; color: var(--primary); }
-    .breadcrumb { margin: 0; font-size: 0.85rem; }
-    .breadcrumb a { color: var(--primary); text-decoration: none; }
-    .stats-row { display: flex; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
-    .stat-card { background: white; padding: 20px; border-radius: 10px; flex: 1; min-width: 150px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .stat-value { font-size: 1.8rem; font-weight: 700; color: var(--primary); }
-    .stat-label { color: #666; font-size: 0.85rem; }
-    .filter-bar { background: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-    .order-table { background: white; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .order-table th { background: #f8f9fa; padding: 12px 15px; font-size: 0.8rem; text-transform: uppercase; color: #666; font-weight: 600; }
-    .order-table td { padding: 15px; border-bottom: 1px solid #eee; vertical-align: middle; }
-    .order-table tr:hover { background: #f8f9fa; }
-    .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; display: inline-block; }
-    .status-pending { background: #fff3e0; color: #e65100; }
-    .status-confirmed { background: #e3f2fd; color: #1565c0; }
-    .status-processing { background: #f3e5f5; color: #7b1fa2; }
-    .status-shipped { background: #e8f5e9; color: #2e7d32; }
-    .status-delivered { background: #d4edda; color: #155724; }
-    .status-cancelled { background: #ffebee; color: #c62828; }
-    .status-returned { background: #fce4ec; color: #880e4f; }
-    .order-id { font-weight: 700; color: var(--primary); font-size: 0.9rem; }
-    .customer-info { font-size: 0.85rem; color: #666; }
-    .amount { font-weight: 700; font-size: 1rem; }
-    .pagination { display: flex; justify-content: center; gap: 5px; margin-top: 20px; }
-    .pagination a, .pagination span { padding: 8px 14px; border-radius: 6px; text-decoration: none; font-weight: 600; }
-    .pagination a { background: var(--primary); color: white; }
-    .pagination span { background: #e0e0e0; color: #666; }
-    .empty-state { text-align: center; padding: 60px 20px; background: white; border-radius: 10px; }
-    .empty-state i { font-size: 4rem; color: #ccc; margin-bottom: 20px; }
-    .action-btns { display: flex; gap: 5px; }
-    .btn-sm-action { padding: 4px 10px; font-size: 0.75rem; border-radius: 4px; border: none; cursor: pointer; }
-    .btn-view { background: var(--info); color: white; }
-    .btn-confirm { background: var(--success); color: white; }
-    .btn-ship { background: var(--primary); color: white; }
-    .btn-deliver { background: var(--success); color: white; }
-    .btn-cancel { background: var(--danger); color: white; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title || 'My Orders' %> | <%= seller.businessName || seller.fullName || 'SellerHub' %></title>
+    <link rel="stylesheet" href="/css/dashboard.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
-  <div class="top-bar">
-    <div>
-      <h4>📦 My Orders</h4>
-      <div class="breadcrumb">
-        <a href="/seller/dashboard">Dashboard</a> / <span>Orders</span>
-      </div>
-    </div>
-    <a href="/seller/dashboard" class="btn btn-outline-secondary btn-sm">
-      <i class="fas fa-arrow-left"></i> Back to Dashboard
-    </a>
-  </div>
+    <div class="dashboard-wrapper">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <img src="/imgs/logo.png" alt="SellerHub" class="brand-logo">
+                <span>SellerHub</span>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="/seller/dashboard" class="nav-item">
+                    <i class="fas fa-home"></i> Dashboard
+                </a>
+                <a href="/products/seller/list" class="nav-item">
+                    <i class="fas fa-box"></i> Products
+                </a>
+                <a href="/seller/orders" class="nav-item active">
+                    <i class="fas fa-shopping-bag"></i> Orders
+                </a>
+                <a href="/seller/earnings" class="nav-item">
+                    <i class="fas fa-wallet"></i> Earnings
+                </a>
+                <a href="/products/seller/stock-alert" class="nav-item">
+                    <i class="fas fa-bell"></i> Stock Alerts
+                </a>
+                <a href="/seller/settings" class="nav-item">
+                    <i class="fas fa-cog"></i> Settings
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <a href="/seller/logout" class="nav-item logout">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
+            </div>
+        </aside>
 
-  <div class="container">
-    <!-- Stats -->
-    <div class="stats-row">
-      <div class="stat-card">
-        <div class="stat-value"><%= stats.total %></div>
-        <div class="stat-label">Total Orders</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" style="color: var(--warning);"><%= stats.pending %></div>
-        <div class="stat-label">Pending</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" style="color: var(--primary);"><%= stats.processing %></div>
-        <div class="stat-label">Processing</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" style="color: var(--success);"><%= stats.delivered %></div>
-        <div class="stat-label">Delivered</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" style="color: var(--danger);"><%= stats.cancelled %></div>
-        <div class="stat-label">Cancelled</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-value" style="color: #333;">₹<%= stats.totalRevenue.toLocaleString('en-IN') %></div>
-        <div class="stat-label">Total Revenue</div>
-      </div>
-    </div>
-
-    <!-- Filters -->
-    <div class="filter-bar">
-      <form method="GET" action="/seller/orders" class="d-flex gap-2 flex-wrap">
-        <select name="status" class="form-select form-select-sm" style="width: auto;">
-          <option value="">All Status</option>
-          <option value="pending" <%= currentStatus === 'pending' ? 'selected' : '' %>>Pending</option>
-          <option value="confirmed" <%= currentStatus === 'confirmed' ? 'selected' : '' %>>Confirmed</option>
-          <option value="processing" <%= currentStatus === 'processing' ? 'selected' : '' %>>Processing</option>
-          <option value="shipped" <%= currentStatus === 'shipped' ? 'selected' : '' %>>Shipped</option>
-          <option value="delivered" <%= currentStatus === 'delivered' ? 'selected' : '' %>>Delivered</option>
-          <option value="cancelled" <%= currentStatus === 'cancelled' ? 'selected' : '' %>>Cancelled</option>
-        </select>
-        <input type="text" name="search" class="form-control form-control-sm" placeholder="Order # or Customer" value="<%= searchQuery %>" style="width: 200px;">
-        <button type="submit" class="btn btn-primary btn-sm"><i class="fas fa-filter"></i> Filter</button>
-        <% if (currentStatus || searchQuery) { %>
-          <a href="/seller/orders" class="btn btn-outline-secondary btn-sm">Clear</a>
-        <% } %>
-      </form>
-    </div>
-
-    <!-- Orders Table -->
-    <div class="order-table">
-      <% if (orders && orders.length > 0) { %>
-        <table class="table table-borderless mb-0">
-          <thead>
-            <tr>
-              <th>Order ID</th>
-              <th>Customer</th>
-              <th>Items</th>
-              <th>Amount</th>
-              <th>Status</th>
-              <th>Date</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <% orders.forEach(order => { %>
-              <tr>
-                <td>
-                  <div class="order-id">#<%= order.orderNumber %></div>
-                  <small class="text-muted"><%= order.paymentMethod.toUpperCase() %></small>
-                </td>
-                <td>
-                  <div><strong><%= order.customerName %></strong></div>
-                  <div class="customer-info"><%= order.customerEmail %></div>
-                  <div class="customer-info"><i class="fas fa-phone"></i> <%= order.customerPhone || 'N/A' %></div>
-                </td>
-                <td>
-                  <% order.items.forEach(item => { %>
-                    <div class="d-flex align-items-center gap-2 mb-1">
-                      <img src="<%= item.productImage || '/images/no-image.png' %>" style="width: 40px; height: 40px; object-fit: cover; border-radius: 4px;">
-                      <div>
-                        <div style="font-size: 0.85rem; font-weight: 600;"><%= item.productTitle %></div>
-                        <div style="font-size: 0.75rem; color: #666;">Qty: <%= item.quantity %> × ₹<%= item.price %></div>
-                      </div>
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-header">
+                <div class="header-title">
+                    <h2><i class="fas fa-shopping-bag"></i> My Orders</h2>
+                </div>
+                <div class="header-actions">
+                    <div class="user-profile">
+                        <img src="<%= seller.profileImageURL || '/imgs/default.png' %>" alt="Profile">
+                        <div>
+                            <strong><%= seller.fullName || 'Seller' %></strong>
+                            <small><%= seller.businessName || seller.email %></small>
+                        </div>
                     </div>
-                  <% }) %>
-                </td>
-                <td>
-                  <div class="amount">₹<%= order.totalAmount.toLocaleString('en-IN') %></div>
-                  <% if (order.shippingCost > 0) { %>
-                    <small class="text-muted">+ ₹<%= order.shippingCost %> shipping</small>
-                  <% } %>
-                </td>
-                <td>
-                  <span class="status-badge status-<%= order.status %>">
-                    <%= order.status.replace('_', ' ').toUpperCase() %>
-                  </span>
-                  <br>
-                  <small class="text-muted"><%= order.paymentStatus %></small>
-                </td>
-                <td>
-                  <%= new Date(order.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) %>
-                  <br>
-                  <small class="text-muted"><%= new Date(order.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) %></small>
-                </td>
-                <td>
-                  <div class="action-btns">
-                    <button class="btn-sm-action btn-view" onclick="viewOrder('<%= order._id %>')">
-                      <i class="fas fa-eye"></i>
-                    </button>
-                    <% if (order.status === 'pending') { %>
-                      <button class="btn-sm-action btn-confirm" onclick="updateStatus('<%= order._id %>', 'confirmed')">
-                        <i class="fas fa-check"></i>
-                      </button>
-                    <% } %>
-                    <% if (order.status === 'confirmed') { %>
-                      <button class="btn-sm-action btn-ship" onclick="updateStatus('<%= order._id %>', 'processing')">
-                        <i class="fas fa-box"></i>
-                      </button>
-                    <% } %>
-                    <% if (order.status === 'processing') { %>
-                      <button class="btn-sm-action btn-ship" onclick="updateStatus('<%= order._id %>', 'shipped')">
-                        <i class="fas fa-truck"></i>
-                      </button>
-                    <% } %>
-                    <% if (order.status === 'shipped') { %>
-                      <button class="btn-sm-action btn-deliver" onclick="updateStatus('<%= order._id %>', 'delivered')">
-                        <i class="fas fa-check-circle"></i>
-                      </button>
-                    <% } %>
-                    <% if (['pending', 'confirmed'].includes(order.status)) { %>
-                      <button class="btn-sm-action btn-cancel" onclick="cancelOrder('<%= order._id %>')">
-                        <i class="fas fa-times"></i>
-                      </button>
-                    <% } %>
-                  </div>
-                </td>
-              </tr>
-            <% }) %>
-          </tbody>
-        </table>
-      <% } else { %>
-        <div class="empty-state">
-          <i class="fas fa-box-open"></i>
-          <h4>No orders yet</h4>
-          <p class="text-muted">Orders will appear here when customers purchase your products</p>
-          <a href="/products/seller/list" class="btn btn-primary mt-3">
-            <i class="fas fa-box"></i> Manage Products
-          </a>
-        </div>
-      <% } %>
+                </div>
+            </header>
+
+            <div class="content-area">
+                <!-- Stats Cards -->
+                <div class="stats-grid compact">
+                    <div class="stat-card">
+                        <div class="stat-icon primary">
+                            <i class="fas fa-shopping-bag"></i>
+                        </div>
+                        <div class="stat-details">
+                            <h3><%= (stats && stats.total) || 0 %></h3>
+                            <p>Total Orders</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon warning">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="stat-details">
+                            <h3><%= (stats && stats.pending) || 0 %></h3>
+                            <p>Pending</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon info">
+                            <i class="fas fa-box"></i>
+                        </div>
+                        <div class="stat-details">
+                            <h3><%= (stats && stats.processing) || 0 %></h3>
+                            <p>Processing</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon success">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <div class="stat-details">
+                            <h3><%= (stats && stats.delivered) || 0 %></h3>
+                            <p>Delivered</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon danger">
+                            <i class="fas fa-times-circle"></i>
+                        </div>
+                        <div class="stat-details">
+                            <h3><%= (stats && stats.cancelled) || 0 %></h3>
+                            <p>Cancelled</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon teal">
+                            <i class="fas fa-rupee-sign"></i>
+                        </div>
+                        <div class="stat-details">
+                            <h3><%= formatCurrency((stats && stats.totalRevenue) || 0) %></h3>
+                            <p>Total Revenue</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filters & Search -->
+                <div class="filter-bar">
+                    <form method="GET" action="/seller/orders" class="filter-form">
+                        <div class="filter-group">
+                            <select name="status" class="filter-select" onchange="this.form.submit()">
+                                <option value="" <%= !currentStatus ? 'selected' : '' %>>All Statuses</option>
+                                <option value="pending" <%= currentStatus === 'pending' ? 'selected' : '' %>>Pending</option>
+                                <option value="confirmed" <%= currentStatus === 'confirmed' ? 'selected' : '' %>>Confirmed</option>
+                                <option value="processing" <%= currentStatus === 'processing' ? 'selected' : '' %>>Processing</option>
+                                <option value="shipped" <%= currentStatus === 'shipped' ? 'selected' : '' %>>Shipped</option>
+                                <option value="out_for_delivery" <%= currentStatus === 'out_for_delivery' ? 'selected' : '' %>>Out for Delivery</option>
+                                <option value="delivered" <%= currentStatus === 'delivered' ? 'selected' : '' %>>Delivered</option>
+                                <option value="cancelled" <%= currentStatus === 'cancelled' ? 'selected' : '' %>>Cancelled</option>
+                            </select>
+                        </div>
+                        <div class="filter-group search-group">
+                            <i class="fas fa-search"></i>
+                            <input type="text" name="search" placeholder="Search by order number..." 
+                                   value="<%= searchQuery || '' %>" class="filter-input">
+                            <button type="submit" class="btn btn-sm btn-primary">Search</button>
+                            <% if (searchQuery) { %>
+                            <a href="/seller/orders" class="btn btn-sm btn-outline">Clear</a>
+                            <% } %>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Orders Table -->
+                <div class="data-card">
+                    <div class="card-header">
+                        <h3><i class="fas fa-list"></i> Order List</h3>
+                        <span class="text-muted"><%= totalOrders || 0 %> orders found</span>
+                    </div>
+                    <div class="card-body">
+                        <% if (orders && orders.length > 0) { %>
+                        <div class="table-wrap">
+                            <table class="data-table orders-table">
+                                <thead>
+                                    <tr>
+                                        <th>Order #</th>
+                                        <th>Items</th>
+                                        <th>Amount</th>
+                                        <th>Your Earnings</th>
+                                        <th>Status</th>
+                                        <th>Payment</th>
+                                        <th>Date</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <% orders.forEach(order => { %>
+                                    <tr data-order-id="<%= order._id %>">
+                                        <td>
+                                            <div class="order-id">
+                                                <strong>#<%= order.orderNumber || order._id.toString().slice(-8).toUpperCase() %></strong>
+                                                <span class="order-meta">
+                                                    <%= order.items ? order.items.length : (order.products ? order.products.length : 0) %> item(s)
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="order-items-preview">
+                                                <% const items = order.items || order.products || []; %>
+                                                <% items.slice(0, 2).forEach(item => { %>
+                                                <div class="item-preview">
+                                                    <img src="<%= item.productImage || item.product?.thumbnail || '/images/no-image.png' %>" 
+                                                         alt="<%= item.productTitle || item.product?.title || 'Product' %>" class="item-thumb">
+                                                    <div class="item-info">
+                                                        <span class="item-title"><%= truncate(item.productTitle || item.product?.title || 'Product', 25) %></span>
+                                                        <span class="item-meta">Qty: <%= item.quantity %> × <%= formatCurrency(item.price) %></span>
+                                                        <% if (item.variant && (item.variant.colorName || item.variant.size)) { %>
+                                                        <span class="item-variant">
+                                                            <%= item.variant.colorName ? item.variant.colorName : '' %>
+                                                            <%= item.variant.size ? ' / ' + item.variant.size : '' %>
+                                                        </span>
+                                                        <% } %>
+                                                    </div>
+                                                </div>
+                                                <% }) %>
+                                                <% if (items.length > 2) { %>
+                                                <span class="more-items">+<%= items.length - 2 %> more</span>
+                                                <% } %>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="amount-breakdown">
+                                                <strong><%= formatCurrency(order.totalAmount || 0) %></strong>
+                                                <% if (order.shippingCost > 0) { %>
+                                                <span class="text-muted">+ <%= formatCurrency(order.shippingCost) %> shipping</span>
+                                                <% } %>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="earnings">
+                                                <strong class="text-success"><%= formatCurrency(order.sellerEarnings || 0) %></strong>
+                                                <span class="text-muted">Platform: <%= formatCurrency(order.platformFee || 0) %></span>
+                                                <% if (order.fundsReleased) { %>
+                                                <span class="badge badge-success">Released</span>
+                                                <% } else if (order.status === 'delivered') { %>
+                                                <span class="badge badge-warning">Pending</span>
+                                                <% } %>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <span class="status-badge <%= getStatusBadge(order.status) %>">
+                                                <%= (order.status || 'pending').replace(/_/g, ' ').toUpperCase() %>
+                                            </span>
+                                            <% if (order.status === 'delivered' && order.returnPolicyEndDate) { %>
+                                            <span class="return-info" title="Return period ends <%= formatDate(order.returnPolicyEndDate) %>">
+                                                <i class="fas fa-shield-alt"></i> <%= order.isReturnPeriodActive ? 'Protected' : 'Clear' %>
+                                            </span>
+                                            <% } %>
+                                        </td>
+                                        <td>
+                                            <div class="payment-info">
+                                                <span class="payment-method"><%= (order.paymentMethod || 'cod').toUpperCase() %></span>
+                                                <span class="payment-status <%= order.paymentStatus === 'paid' ? 'text-success' : (order.paymentStatus === 'pending' ? 'text-warning' : 'text-danger') %>">
+                                                    <%= (order.paymentStatus || 'pending').toUpperCase() %>
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="order-date">
+                                                <span><%= formatDate(order.createdAt) %></span>
+                                                <% if (order.deliveredAt) { %>
+                                                <span class="text-success"><i class="fas fa-check"></i> Delivered</span>
+                                                <% } %>
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <div class="action-buttons">
+                                                <button class="btn btn-sm btn-outline" onclick="viewOrder('<%= order._id %>')">
+                                                    <i class="fas fa-eye"></i> View
+                                                </button>
+                                                
+                                                <% if (order.status === 'pending') { %>
+                                                <button class="btn btn-sm btn-primary" onclick="updateStatus('<%= order._id %>', 'confirmed')">
+                                                    <i class="fas fa-check"></i> Confirm
+                                                </button>
+                                                <% } %>
+                                                
+                                                <% if (order.status === 'confirmed') { %>
+                                                <button class="btn btn-sm btn-primary" onclick="updateStatus('<%= order._id %>', 'processing')">
+                                                    <i class="fas fa-cogs"></i> Process
+                                                </button>
+                                                <% } %>
+                                                
+                                                <% if (order.status === 'processing') { %>
+                                                <button class="btn btn-sm btn-primary" onclick="updateStatus('<%= order._id %>', 'shipped')">
+                                                    <i class="fas fa-shipping-fast"></i> Ship
+                                                </button>
+                                                <% } %>
+                                                
+                                                <% if (['pending', 'confirmed'].includes(order.status)) { %>
+                                                <button class="btn btn-sm btn-danger" onclick="cancelOrder('<%= order._id %>')">
+                                                    <i class="fas fa-times"></i> Cancel
+                                                </button>
+                                                <% } %>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <% }) %>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination -->
+                        <% if (totalPages > 1) { %>
+                        <div class="pagination">
+                            <% if (hasPrev) { %>
+                            <a href="?page=<%= currentPage - 1 %><%= currentStatus ? '&status=' + currentStatus : '' %><%= searchQuery ? '&search=' + encodeURIComponent(searchQuery) : '' %>" 
+                               class="page-link">
+                                <i class="fas fa-chevron-left"></i> Previous
+                            </a>
+                            <% } %>
+                            
+                            <div class="page-numbers">
+                                <% for (let i = 1; i <= totalPages; i++) { %>
+                                <% if (i === currentPage) { %>
+                                <span class="page-link active"><%= i %></span>
+                                <% } else if (i === 1 || i === totalPages || (i >= currentPage - 1 && i <= currentPage + 1)) { %>
+                                <a href="?page=<%= i %><%= currentStatus ? '&status=' + currentStatus : '' %><%= searchQuery ? '&search=' + encodeURIComponent(searchQuery) : '' %>" 
+                                   class="page-link"><%= i %></a>
+                                <% } else if (i === currentPage - 2 || i === currentPage + 2) { %>
+                                <span class="page-link dots">...</span>
+                                <% } %>
+                                <% } %>
+                            </div>
+                            
+                            <% if (hasNext) { %>
+                            <a href="?page=<%= currentPage + 1 %><%= currentStatus ? '&status=' + currentStatus : '' %><%= searchQuery ? '&search=' + encodeURIComponent(searchQuery) : '' %>" 
+                               class="page-link">
+                                Next <i class="fas fa-chevron-right"></i>
+                            </a>
+                            <% } %>
+                        </div>
+                        <% } %>
+
+                        <% } else { %>
+                        <div class="empty-state">
+                            <i class="fas fa-shopping-bag fa-3x"></i>
+                            <h4>No orders found</h4>
+                            <p><%= searchQuery ? 'No orders match your search.' : 'You have no orders yet.' %></p>
+                            <% if (searchQuery) { %>
+                            <a href="/seller/orders" class="btn btn-outline">Clear Filters</a>
+                            <% } %>
+                        </div>
+                        <% } %>
+                    </div>
+                </div>
+            </div>
+        </main>
     </div>
 
-    <!-- Pagination -->
-    <% if (totalPages > 1) { %>
-      <div class="pagination">
-        <% if (hasPrev) { %>
-          <a href="/seller/orders?page=<%= currentPage - 1 %><%= currentStatus ? '&status=' + currentStatus : '' %><%= searchQuery ? '&search=' + encodeURIComponent(searchQuery) : '' %>">← Prev</a>
-        <% } else { %>
-          <span>← Prev</span>
-        <% } %>
-        <span style="background: white; color: #333;">Page <%= currentPage %> of <%= totalPages %></span>
-        <% if (hasNext) { %>
-          <a href="/seller/orders?page=<%= currentPage + 1 %><%= currentStatus ? '&status=' + currentStatus : '' %><%= searchQuery ? '&search=' + encodeURIComponent(searchQuery) : '' %>">Next →</a>
-        <% } else { %>
-          <span>Next →</span>
-        <% } %>
-      </div>
-    <% } %>
-  </div>
-
-  <!-- Order Detail Modal -->
-  <div class="modal fade" id="orderModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Order Details</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+    <!-- Order Detail Modal -->
+    <div id="orderModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fas fa-file-invoice"></i> Order Details</h3>
+                <button class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body" id="modalBody">
+                <!-- Populated via AJAX -->
+            </div>
         </div>
-        <div class="modal-body" id="orderModalBody">
-          Loading...
-        </div>
-      </div>
     </div>
-  </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-  <script>
-    async function updateStatus(orderId, status) {
-      const note = prompt('Add a note (optional):');
-      if (note === null) return;
-      try {
-        const res = await fetch(`/seller/orders/${orderId}/status`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status, note })
-        });
-        const data = await res.json();
-        if (data.success) {
-          alert('Status updated!');
-          location.reload();
-        } else {
-          alert(data.message || 'Failed to update');
-        }
-      } catch (e) {
-        alert('Error: ' + e.message);
-      }
-    }
-
-    async function cancelOrder(orderId) {
-      const reason = prompt('Enter cancellation reason:');
-      if (!reason) return;
-      try {
-        const res = await fetch(`/seller/orders/${orderId}/cancel`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reason })
-        });
-        const data = await res.json();
-        if (data.success) {
-          alert('Order cancelled!');
-          location.reload();
-        } else {
-          alert(data.message || 'Failed to cancel');
-        }
-      } catch (e) {
-        alert('Error: ' + e.message);
-      }
-    }
-
-    async function viewOrder(orderId) {
-      try {
-        const res = await fetch(`/seller/orders/${orderId}`);
-        const data = await res.json();
-        if (data.success) {
-          const o = data.order;
-          let html = `
-            <div class="row">
-              <div class="col-md-6">
-                <h6>Order #${o.orderNumber}</h6>
-                <p><strong>Status:</strong> ${o.status.toUpperCase()}</p>
-                <p><strong>Payment:</strong> ${o.paymentStatus} (${o.paymentMethod})</p>
-                <p><strong>Date:</strong> ${new Date(o.createdAt).toLocaleString()}</p>
-              </div>
-              <div class="col-md-6">
-                <h6>Customer</h6>
-                <p><strong>Name:</strong> ${o.customerName}</p>
-                <p><strong>Email:</strong> ${o.customerEmail}</p>
-                <p><strong>Phone:</strong> ${o.customerPhone || 'N/A'}</p>
-              </div>
+    <!-- Cancel Modal -->
+    <div id="cancelModal" class="modal">
+        <div class="modal-content small">
+            <div class="modal-header">
+                <h3><i class="fas fa-exclamation-triangle"></i> Cancel Order</h3>
+                <button class="modal-close" onclick="closeCancelModal()"><i class="fas fa-times"></i></button>
             </div>
-            <hr>
-            <h6>Items</h6>
-            <table class="table table-sm">
-              <thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
-              <tbody>
-                ${o.items.map(item => `
-                  <tr>
-                    <td>${item.productTitle}</td>
-                    <td>${item.quantity}</td>
-                    <td>₹${item.price}</td>
-                    <td>₹${item.total}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-            <hr>
-            <div class="text-end">
-              <p>Subtotal: ₹${o.subtotal}</p>
-              ${o.shippingCost ? `<p>Shipping: ₹${o.shippingCost}</p>` : ''}
-              ${o.taxAmount ? `<p>Tax: ₹${o.taxAmount}</p>` : ''}
-              <h5>Total: ₹${o.totalAmount}</h5>
+            <div class="modal-body">
+                <p>Are you sure you want to cancel this order? This action cannot be undone.</p>
+                <textarea id="cancelReason" placeholder="Reason for cancellation (optional)" rows="3" class="form-input"></textarea>
+                <div class="modal-actions">
+                    <button class="btn btn-outline" onclick="closeCancelModal()">Keep Order</button>
+                    <button class="btn btn-danger" id="confirmCancelBtn">Yes, Cancel</button>
+                </div>
             </div>
-          `;
-          document.getElementById('orderModalBody').innerHTML = html;
-          new bootstrap.Modal(document.getElementById('orderModal')).show();
+        </div>
+    </div>
+
+    <script>
+        // View order details via AJAX
+        async function viewOrder(orderId) {
+            try {
+                const res = await fetch(`/seller/orders/${orderId}`);
+                const data = await res.json();
+                
+                if (data.success && data.order) {
+                    const order = data.order;
+                    const items = order.items || order.products || [];
+                    
+                    let html = `
+                        <div class="order-detail">
+                            <div class="detail-header">
+                                <div>
+                                    <h4>Order #${order.orderNumber || order._id.slice(-8).toUpperCase()}</h4>
+                                    <span class="status-badge ${getStatusClass(order.status)}">
+                                        ${(order.status || 'PENDING').replace(/_/g, ' ').toUpperCase()}
+                                    </span>
+                                </div>
+                                <div class="detail-date">
+                                    ${new Date(order.createdAt).toLocaleString('en-IN')}
+                                </div>
+                            </div>
+                            
+                            <div class="detail-section">
+                                <h5><i class="fas fa-box"></i> Items</h5>
+                                <div class="detail-items">
+                                    ${items.map(item => `
+                                        <div class="detail-item">
+                                            <img src="${item.productImage || '/images/no-image.png'}" alt="">
+                                            <div>
+                                                <strong>${item.productTitle || 'Product'}</strong>
+                                                <span>Qty: ${item.quantity} × ₹${(item.price || 0).toLocaleString('en-IN')}</span>
+                                                ${item.variant && (item.variant.colorName || item.variant.size) ? 
+                                                    `<span class="variant">${item.variant.colorName || ''} ${item.variant.size ? '/ ' + item.variant.size : ''}</span>` : ''}
+                                            </div>
+                                            <strong>₹${(item.total || item.quantity * item.price || 0).toLocaleString('en-IN')}</strong>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            
+                            <div class="detail-section">
+                                <h5><i class="fas fa-receipt"></i> Amount Breakdown</h5>
+                                <div class="detail-breakdown">
+                                    <div><span>Subtotal:</span> <strong>₹${(order.subtotal || 0).toLocaleString('en-IN')}</strong></div>
+                                    <div><span>Shipping:</span> <span>₹${(order.shippingCost || 0).toLocaleString('en-IN')}</span></div>
+                                    <div><span>Discount:</span> <span>-₹${(order.discountAmount || 0).toLocaleString('en-IN')}</span></div>
+                                    <div class="total"><span>Total:</span> <strong>₹${(order.totalAmount || 0).toLocaleString('en-IN')}</strong></div>
+                                    <div class="earnings"><span>Your Earnings (90%):</span> <strong class="text-success">₹${(order.sellerEarnings || 0).toLocaleString('en-IN')}</strong></div>
+                                    <div><span>Platform Fee (10%):</span> <span>₹${(order.platformFee || 0).toLocaleString('en-IN')}</span></div>
+                                </div>
+                            </div>
+                            
+                            ${order.statusHistory && order.statusHistory.length > 0 ? `
+                            <div class="detail-section">
+                                <h5><i class="fas fa-history"></i> Status History</h5>
+                                <div class="timeline">
+                                    ${order.statusHistory.map(h => `
+                                        <div class="timeline-item">
+                                            <div class="timeline-dot ${getStatusClass(h.status)}"></div>
+                                            <div class="timeline-content">
+                                                <strong>${(h.status || '').replace(/_/g, ' ').toUpperCase()}</strong>
+                                                <p>${h.note || ''}</p>
+                                                <span>${new Date(h.updatedAt || order.createdAt).toLocaleString('en-IN')}</span>
+                                            </div>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                            ` : ''}
+                        </div>
+                    `;
+                    
+                    document.getElementById('modalBody').innerHTML = html;
+                    document.getElementById('orderModal').classList.add('active');
+                }
+            } catch (err) {
+                console.error('Error fetching order:', err);
+                alert('Failed to load order details');
+            }
         }
-      } catch (e) {
-        alert('Error loading order details');
-      }
-    }
-  </script>
+
+        // Update order status
+        async function updateStatus(orderId, newStatus) {
+            if (!confirm(`Change order status to ${newStatus.toUpperCase()}?`)) return;
+            
+            try {
+                const res = await fetch(`/seller/orders/${orderId}/status`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: newStatus, note: `Status changed to ${newStatus}` })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert(data.message || 'Failed to update status');
+                }
+            } catch (err) {
+                console.error('Error:', err);
+                alert('Failed to update status');
+            }
+        }
+
+        // Cancel order
+        let cancelOrderId = null;
+        
+        function cancelOrder(orderId) {
+            cancelOrderId = orderId;
+            document.getElementById('cancelModal').classList.add('active');
+        }
+        
+        function closeCancelModal() {
+            document.getElementById('cancelModal').classList.remove('active');
+            cancelOrderId = null;
+        }
+        
+        document.getElementById('confirmCancelBtn').addEventListener('click', async () => {
+            if (!cancelOrderId) return;
+            
+            const reason = document.getElementById('cancelReason').value;
+            
+            try {
+                const res = await fetch(`/seller/orders/${cancelOrderId}/cancel`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ reason: reason || 'Cancelled by seller' })
+                });
+                const data = await res.json();
+                
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert(data.message || 'Failed to cancel order');
+                }
+            } catch (err) {
+                console.error('Error:', err);
+                alert('Failed to cancel order');
+            }
+        });
+        
+        function closeModal() {
+            document.getElementById('orderModal').classList.remove('active');
+        }
+        
+        function getStatusClass(status) {
+            const map = {
+                'pending': 'badge-warning',
+                'confirmed': 'badge-info',
+                'processing': 'badge-primary',
+                'shipped': 'badge-primary',
+                'out_for_delivery': 'badge-info',
+                'delivered': 'badge-success',
+                'cancelled': 'badge-danger',
+                'returned': 'badge-secondary',
+                'refunded': 'badge-secondary'
+            };
+            return map[status] || 'badge-secondary';
+        }
+        
+        // Close modals on outside click
+        window.onclick = function(e) {
+            if (e.target.classList.contains('modal')) {
+                e.target.classList.remove('active');
+            }
+        }
+    </script>
 </body>
 </html>
