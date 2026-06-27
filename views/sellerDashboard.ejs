@@ -1,904 +1,375 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><%= title %> | <%= seller.businessName %></title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <style>
-    :root {
-      --primary: #2874f0;
-      --success: #388e3c;
-      --danger: #d32f2f;
-      --warning: #f9a825;
-      --info: #0288d1;
-      --bg-light: #f1f3f6;
-      --card-bg: #ffffff;
-      --text-dark: #212121;
-      --text-muted: #878787;
-      --border: #e0e0e0;
-    }
-
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-
-    body {
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      background: var(--bg-light);
-      color: var(--text-dark);
-    }
-
-    .sidebar {
-      width: 260px;
-      height: 100vh;
-      position: fixed;
-      left: 0;
-      top: 0;
-      background: linear-gradient(180deg, #1a237e 0%, #283593 100%);
-      color: white;
-      overflow-y: auto;
-      z-index: 1000;
-    }
-
-    .sidebar-brand {
-      padding: 20px;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .sidebar-brand img {
-      width: 40px; height: 40px; border-radius: 8px; object-fit: cover; background: white;
-    }
-
-    .sidebar-brand h4 { font-size: 1.1rem; font-weight: 600; margin: 0; }
-    .sidebar-brand small { font-size: 0.75rem; opacity: 0.7; }
-
-    .nav-menu { padding: 15px 0; }
-    .nav-item {
-      padding: 12px 20px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      color: rgba(255,255,255,0.8);
-      text-decoration: none;
-      transition: all 0.2s;
-      border-left: 3px solid transparent;
-    }
-    .nav-item:hover, .nav-item.active {
-      background: rgba(255,255,255,0.1);
-      color: white;
-      border-left-color: #ffeb3b;
-    }
-    .admin-nav {
-      background: linear-gradient(90deg, rgba(239,68,68,0.2), transparent);
-      border-left-color: #ef4444 !important;
-    }
-    .admin-nav:hover {
-      background: linear-gradient(90deg, rgba(239,68,68,0.3), transparent) !important;
-    }
-    .nav-item i { width: 20px; text-align: center; }
-
-    .main-content { margin-left: 260px; min-height: 100vh; }
-
-    .top-header {
-      background: white;
-      padding: 15px 30px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-
-    .header-actions { display: flex; align-items: center; gap: 20px; }
-    .seller-profile {
-      display: flex; align-items: center; gap: 10px; cursor: pointer;
-    }
-    .seller-profile img {
-      width: 36px; height: 36px; border-radius: 50%; object-fit: cover;
-    }
-
-    .content-area { padding: 25px 30px; }
-
-    .welcome-banner {
-      background: linear-gradient(135deg, var(--primary), #1565c0);
-      color: white;
-      padding: 30px;
-      border-radius: 16px;
-      margin-bottom: 25px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .welcome-banner h1 {
-      font-size: 1.6rem;
-      font-weight: 700;
-      margin-bottom: 5px;
-    }
-
-    .welcome-banner p { opacity: 0.9; font-size: 0.95rem; }
-
-    .btn-white {
-      background: white;
-      color: var(--primary);
-      padding: 10px 24px;
-      border-radius: 8px;
-      text-decoration: none;
-      font-weight: 600;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      transition: all 0.2s;
-      border: none;
-    }
-
-    .btn-white:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-    }
-
-    /* Stats Cards */
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 20px;
-      margin-bottom: 25px;
-    }
-
-    .stat-card {
-      background: white;
-      padding: 24px;
-      border-radius: 16px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .stat-card::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0;
-      width: 4px;
-      height: 100%;
-      border-radius: 16px 0 0 16px;
-    }
-
-    .stat-card.primary::before { background: var(--primary); }
-    .stat-card.success::before { background: var(--success); }
-    .stat-card.warning::before { background: var(--warning); }
-    .stat-card.danger::before { background: var(--danger); }
-
-    .stat-icon {
-      width: 48px; height: 48px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.3rem;
-      margin-bottom: 15px;
-    }
-
-    .stat-card.primary .stat-icon { background: rgba(40,116,240,0.1); color: var(--primary); }
-    .stat-card.success .stat-icon { background: rgba(56,142,60,0.1); color: var(--success); }
-    .stat-card.warning .stat-icon { background: rgba(249,168,37,0.1); color: var(--warning); }
-    .stat-card.danger .stat-icon { background: rgba(211,47,47,0.1); color: var(--danger); }
-
-    .stat-value {
-      font-size: 1.8rem;
-      font-weight: 700;
-      color: var(--text-dark);
-      margin-bottom: 4px;
-    }
-
-    .stat-label {
-      font-size: 0.85rem;
-      color: var(--text-muted);
-    }
-
-    .stat-change {
-      font-size: 0.8rem;
-      margin-top: 8px;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .stat-change.up { color: var(--success); }
-    .stat-change.down { color: var(--danger); }
-
-    /* Charts Section */
-    .charts-row {
-      display: grid;
-      grid-template-columns: 2fr 1fr;
-      gap: 20px;
-      margin-bottom: 25px;
-    }
-
-    .chart-card {
-      background: white;
-      border-radius: 16px;
-      padding: 24px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
-
-    .chart-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-    }
-
-    .chart-header h3 {
-      font-size: 1.1rem;
-      font-weight: 600;
-    }
-
-    .chart-period {
-      display: flex;
-      gap: 8px;
-    }
-
-    .period-btn {
-      padding: 6px 14px;
-      border: 1px solid var(--border);
-      background: white;
-      border-radius: 6px;
-      font-size: 0.8rem;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-
-    .period-btn:hover, .period-btn.active {
-      background: var(--primary);
-      color: white;
-      border-color: var(--primary);
-    }
-
-    /* Tables */
-    .table-card {
-      background: white;
-      border-radius: 16px;
-      padding: 24px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
-
-    .table-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 20px;
-    }
-
-    .table-header h3 {
-      font-size: 1.1rem;
-      font-weight: 600;
-    }
-
-    .view-all {
-      color: var(--primary);
-      text-decoration: none;
-      font-size: 0.85rem;
-      font-weight: 500;
-    }
-
-    .view-all:hover { text-decoration: underline; }
-
-    .data-table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-
-    .data-table th {
-      text-align: left;
-      padding: 12px;
-      font-size: 0.75rem;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--text-muted);
-      border-bottom: 1px solid var(--border);
-      font-weight: 600;
-    }
-
-    .data-table td {
-      padding: 14px 12px;
-      border-bottom: 1px solid var(--border);
-      font-size: 0.9rem;
-      vertical-align: middle;
-    }
-
-    .data-table tr:last-child td { border-bottom: none; }
-    .data-table tr:hover { background: rgba(40,116,240,0.02); }
-
-    .product-cell {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .product-cell img {
-      width: 44px; height: 44px;
-      border-radius: 8px;
-      object-fit: cover;
-      background: var(--bg-light);
-    }
-
-    .product-cell .info h4 {
-      font-size: 0.9rem;
-      font-weight: 600;
-      margin: 0;
-    }
-
-    .product-cell .info span {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-    }
-
-    .status-pill {
-      padding: 4px 12px;
-      border-radius: 20px;
-      font-size: 0.75rem;
-      font-weight: 600;
-    }
-
-    .status-pill.active { background: #e8f5e9; color: var(--success); }
-    .status-pill.low { background: #fff3e0; color: #ef6c00; }
-    .status-pill.out { background: #ffebee; color: var(--danger); }
-
-    .price-cell {
-      font-weight: 600;
-      color: var(--text-dark);
-    }
-
-    .sales-cell {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      color: var(--text-muted);
-      font-size: 0.85rem;
-    }
-
-    .sales-cell i { color: var(--success); }
-
-    /* Two Column Layout */
-    .two-col {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 20px;
-      margin-bottom: 25px;
-    }
-
-    /* Alert Cards */
-    .alert-card {
-      background: white;
-      border-radius: 16px;
-      padding: 20px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
-
-    .alert-item {
-      display: flex;
-      align-items: flex-start;
-      gap: 12px;
-      padding: 12px 0;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .alert-item:last-child { border-bottom: none; padding-bottom: 0; }
-    .alert-item:first-child { padding-top: 0; }
-
-    .alert-icon {
-      width: 36px; height: 36px;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-
-    .alert-icon.warning { background: #fff3e0; color: var(--warning); }
-    .alert-icon.danger { background: #ffebee; color: var(--danger); }
-    .alert-icon.info { background: #e3f2fd; color: var(--info); }
-
-    .alert-content h4 {
-      font-size: 0.9rem;
-      font-weight: 600;
-      margin-bottom: 2px;
-    }
-
-    .alert-content p {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      margin: 0;
-    }
-
-    .alert-time {
-      font-size: 0.75rem;
-      color: var(--text-muted);
-      margin-left: auto;
-      white-space: nowrap;
-    }
-
-    /* Quick Actions */
-    .quick-actions {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 15px;
-      margin-bottom: 25px;
-    }
-
-    .action-card {
-      background: white;
-      border-radius: 12px;
-      padding: 20px;
-      text-align: center;
-      text-decoration: none;
-      color: var(--text-dark);
-      transition: all 0.2s;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
-
-    .action-card:hover {
-      transform: translateY(-3px);
-      box-shadow: 0 6px 20px rgba(0,0,0,0.1);
-      color: var(--primary);
-    }
-
-    .action-card i {
-      font-size: 1.5rem;
-      margin-bottom: 10px;
-      display: block;
-    }
-
-    .action-card span {
-      font-size: 0.85rem;
-      font-weight: 500;
-    }
-
-    /* Responsive */
-    @media (max-width: 1200px) {
-      .stats-grid { grid-template-columns: repeat(2, 1fr); }
-      .charts-row { grid-template-columns: 1fr; }
-      .two-col { grid-template-columns: 1fr; }
-      .quick-actions { grid-template-columns: repeat(2, 1fr); }
-    }
-
-    @media (max-width: 768px) {
-      .sidebar { transform: translateX(-100%); }
-      .main-content { margin-left: 0; }
-      .stats-grid { grid-template-columns: 1fr; }
-      .quick-actions { grid-template-columns: 1fr; }
-      .welcome-banner { flex-direction: column; text-align: center; gap: 15px; }
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title || 'Seller Dashboard' %> | <%= seller.businessName || seller.fullName || 'SellerHub' %></title>
+    <link rel="stylesheet" href="/css/dashboard.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
-
-  <!-- Sidebar -->
-  <aside class="sidebar">
-    <div class="sidebar-brand">
-      <img src="<%= seller.businessLogo || '/images/default-shop.png' %>" alt="Logo">
-      <div>
-        <h4><%= seller.businessName %></h4>
-        <small>Seller Panel</small>
-      </div>
-    </div>
-
-    <nav class="nav-menu">
-      <a href="/products/seller/dashboard" class="nav-item active">
-        <i class="fas fa-chart-line"></i> Dashboard
-      </a>
-      <a href="/products/seller/list" class="nav-item">
-        <i class="fas fa-box"></i> My Products
-      </a>
-      <a href="/products/seller/add" class="nav-item">
-        <i class="fas fa-plus-circle"></i> Add Product
-      </a>
-      <a href="/products/seller/stock-alert" class="nav-item">
-        <i class="fas fa-bell"></i> Stock Alerts
-        <span class="badge bg-warning text-dark ms-auto" style="font-size:0.65rem;">3</span>
-      </a>
-      <a href="/seller/orders" class="nav-item">
-        <i class="fas fa-shopping-bag"></i> Orders
-      </a>
-      <a href="/seller/earnings" class="nav-item">
-        <i class="fas fa-wallet"></i> Earnings
-      </a>
-      <a href="/seller/settings" class="nav-item">
-        <i class="fas fa-cog"></i> Settings
-      </a>
-      <% if (seller && seller.role === 'ADMIN') { %>
-      <a href="/admin" class="nav-item admin-nav">
-        <i class="fas fa-shield-alt"></i> Admin Panel
-        <span class="badge bg-danger ms-auto" style="font-size:0.65rem;">ADMIN</span>
-      </a>
-      <% } %>
-      <a href="/seller/logout" class="nav-item" style="margin-top: auto; border-top: 1px solid rgba(255,255,255,0.1);">
-        <i class="fas fa-sign-out-alt"></i> Logout
-      </a>
-    </nav>
-  </aside>
-
-  <!-- Main Content -->
-  <div class="main-content">
-    <!-- Top Header -->
-    <header class="top-header">
-      <div></div>
-      <div class="header-actions">
-        <div class="seller-profile">
-          <img src="<%= seller.businessLogo || '/images/default-avatar.png' %>" alt="Profile">
-          <span><%= seller.displayName || seller.businessName %></span>
-          <i class="fas fa-chevron-down" style="font-size:0.7rem;"></i>
-        </div>
-      </div>
-    </header>
-
-    <!-- Content Area -->
-    <div class="content-area">
-      <!-- Welcome Banner -->
-      <div class="welcome-banner">
-        <div>
-          <h1>Welcome back, <%= seller.displayName || seller.businessName %>!</h1>
-          <p>Here's what's happening with your store today.</p>
-        </div>
-        <a href="/products/seller/add" class="btn-white">
-          <i class="fas fa-plus"></i> Add New Product
-        </a>
-      </div>
-
-      <!-- Quick Actions -->
-      <div class="quick-actions">
-        <a href="/products/seller/add" class="action-card">
-          <i class="fas fa-plus-circle" style="color: var(--primary);"></i>
-          <span>Add Product</span>
-        </a>
-        <a href="/products/seller/list" class="action-card">
-          <i class="fas fa-boxes" style="color: var(--success);"></i>
-          <span>View Products</span>
-        </a>
-        <a href="/seller/orders" class="action-card">
-          <i class="fas fa-shopping-bag" style="color: var(--warning);"></i>
-          <span>Manage Orders</span>
-        </a>
-        <a href="/seller/earnings" class="action-card">
-          <i class="fas fa-chart-pie" style="color: var(--danger);"></i>
-          <span>View Earnings</span>
-        </a>
-      </div>
-
-      <!-- Stats Grid -->
-      <div class="stats-grid">
-        <div class="stat-card primary">
-          <div class="stat-icon"><i class="fas fa-box"></i></div>
-          <div class="stat-value"><%= stats.totalProducts %></div>
-          <div class="stat-label">Total Products</div>
-          <div class="stat-change up">
-            <i class="fas fa-arrow-up"></i> <%= stats.activeProducts %> active
-          </div>
-        </div>
-
-        <div class="stat-card success">
-          <div class="stat-icon"><i class="fas fa-rupee-sign"></i></div>
-          <div class="stat-value">â‚¹<%= (stats.totalRevenue || 0).toLocaleString('en-IN') %></div>
-          <div class="stat-label">Total Revenue</div>
-          <div class="stat-change up">
-            <i class="fas fa-arrow-up"></i> Lifetime earnings
-          </div>
-        </div>
-
-        <div class="stat-card warning">
-          <div class="stat-icon"><i class="fas fa-exclamation-triangle"></i></div>
-          <div class="stat-value"><%= stats.lowStockProducts %></div>
-          <div class="stat-label">Low Stock Items</div>
-          <div class="stat-change down">
-            <i class="fas fa-arrow-down"></i> Needs restock
-          </div>
-        </div>
-
-        <div class="stat-card danger">
-          <div class="stat-icon"><i class="fas fa-times-circle"></i></div>
-          <div class="stat-value"><%= stats.outOfStockProducts %></div>
-          <div class="stat-label">Out of Stock</div>
-          <div class="stat-change down">
-            <i class="fas fa-arrow-down"></i> Urgent restock
-          </div>
-        </div>
-      </div>
-
-      <!-- Charts Row -->
-      <div class="charts-row">
-        <div class="chart-card">
-          <div class="chart-header">
-            <h3><i class="fas fa-chart-area" style="color: var(--primary); margin-right: 8px;"></i> Revenue Overview</h3>
-            <div class="chart-period">
-              <button class="period-btn active">7 Days</button>
-              <button class="period-btn">30 Days</button>
-              <button class="period-btn">1 Year</button>
+    <div class="dashboard-wrapper">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <img src="/imgs/logo.png" alt="SellerHub" class="brand-logo">
+                <span>SellerHub</span>
             </div>
-          </div>
-          <canvas id="revenueChart" height="100"></canvas>
-        </div>
-
-        <div class="chart-card">
-          <div class="chart-header">
-            <h3><i class="fas fa-chart-pie" style="color: var(--success); margin-right: 8px;"></i> Sales by Category</h3>
-          </div>
-          <canvas id="categoryChart" height="180"></canvas>
-        </div>
-      </div>
-
-      <!-- Two Column: Recent Products & Alerts -->
-      <div class="two-col">
-        <!-- Recent Products -->
-        <div class="table-card">
-          <div class="table-header">
-            <h3><i class="fas fa-clock" style="color: var(--primary); margin-right: 8px;"></i> Recently Added Products</h3>
-            <a href="/products/seller/list" class="view-all">View All <i class="fas fa-arrow-right" style="font-size:0.7rem;"></i></a>
-          </div>
-          <table class="data-table">
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th>Price</th>
-                <th>Stock</th>
-                <th>Sales</th>
-              </tr>
-            </thead>
-            <tbody>
-              <% if (recentProducts && recentProducts.length > 0) { %>
-                <% recentProducts.forEach(product => { %>
-                  <tr>
-                    <td>
-                      <div class="product-cell">
-                        <img src="<%= product.thumbnail || '/images/placeholder-product.jpg' %>" alt="">
-                        <div class="info">
-                          <h4><%= product.title %></h4>
-                          <span><%= product.category %> | <%= product.productType %></span>
-                        </div>
-                      </div>
-                    </td>
-                    <td class="price-cell">â‚¹<%= product.sellingPrice.toLocaleString('en-IN') %></td>
-                    <td>
-                      <span class="status-pill <%= product.stockStatus === 'In Stock' ? 'active' : product.stockStatus === 'Low Stock' ? 'low' : 'out' %>">
-                        <%= product.stockStatus %>
-                      </span>
-                    </td>
-                    <td class="sales-cell">
-                      <i class="fas fa-shopping-cart"></i> <%= product.totalSales || 0 %>
-                    </td>
-                  </tr>
-                <% }) %>
-              <% } else { %>
-                <tr>
-                  <td colspan="4" style="text-align: center; padding: 30px; color: var(--text-muted);">
-                    <i class="fas fa-box-open" style="font-size: 2rem; display: block; margin-bottom: 10px;"></i>
-                    No products yet. <a href="/products/seller/add" style="color: var(--primary);">Add your first product</a>
-                  </td>
-                </tr>
-              <% } %>
-            </tbody>
-          </table>
-        </div>
-
-        <!-- Stock Alerts -->
-        <div class="alert-card">
-          <div class="table-header">
-            <h3><i class="fas fa-bell" style="color: var(--warning); margin-right: 8px;"></i> Stock Alerts</h3>
-            <a href="/products/seller/stock-alert" class="view-all">View All</a>
-          </div>
-
-          <div class="alert-item">
-            <div class="alert-icon danger"><i class="fas fa-times-circle"></i></div>
-            <div class="alert-content">
-              <h4>Out of Stock Alert</h4>
-              <p>3 products are completely out of stock</p>
+            <nav class="sidebar-nav">
+                <a href="/seller/dashboard" class="nav-item active">
+                    <i class="fas fa-home"></i> Dashboard
+                </a>
+                <a href="/products/seller/list" class="nav-item">
+                    <i class="fas fa-box"></i> Products
+                </a>
+                <a href="/seller/orders" class="nav-item">
+                    <i class="fas fa-shopping-bag"></i> Orders
+                    <% if (typeof newOrdersCount !== 'undefined' && newOrdersCount > 0) { %>
+                    <span class="nav-badge"><%= newOrdersCount %></span>
+                    <% } %>
+                </a>
+                <a href="/seller/earnings" class="nav-item">
+                    <i class="fas fa-wallet"></i> Earnings
+                </a>
+                <a href="/products/seller/stock-alert" class="nav-item">
+                    <i class="fas fa-bell"></i> Stock Alerts
+                    <% if (stats && (stats.lowStockProducts > 0 || stats.outOfStockProducts > 0)) { %>
+                    <span class="nav-badge alert"><%= (stats.lowStockProducts || 0) + (stats.outOfStockProducts || 0) %></span>
+                    <% } %>
+                </a>
+                <a href="/seller/settings" class="nav-item">
+                    <i class="fas fa-cog"></i> Settings
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <a href="/seller/logout" class="nav-item logout">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </a>
             </div>
-            <span class="alert-time">Just now</span>
-          </div>
+        </aside>
 
-          <div class="alert-item">
-            <div class="alert-icon warning"><i class="fas fa-exclamation-triangle"></i></div>
-            <div class="alert-content">
-              <h4>Low Stock Warning</h4>
-              <p><%= stats.lowStockProducts %> products running low on inventory</p>
-            </div>
-            <span class="alert-time">2h ago</span>
-          </div>
-
-          <div class="alert-item">
-            <div class="alert-icon info"><i class="fas fa-info-circle"></i></div>
-            <div class="alert-content">
-              <h4>New Order Received</h4>
-              <p>You have 2 new pending orders to process</p>
-            </div>
-            <span class="alert-time">5h ago</span>
-          </div>
-
-          <div class="alert-item">
-            <div class="alert-icon warning"><i class="fas fa-star"></i></div>
-            <div class="alert-content">
-              <h4>Review Alert</h4>
-              <p>1 new customer review needs your response</p>
-            </div>
-            <span class="alert-time">1d ago</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Top Selling Products -->
-      <div class="table-card">
-        <div class="table-header">
-          <h3><i class="fas fa-fire" style="color: var(--danger); margin-right: 8px;"></i> Top Selling Products</h3>
-          <a href="/products/seller/list?sort=popular" class="view-all">View All</a>
-        </div>
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Rank</th>
-              <th>Product</th>
-              <th>Category</th>
-              <th>Price</th>
-              <th>Units Sold</th>
-              <th>Revenue</th>
-            </tr>
-          </thead>
-          <tbody>
-            <% if (topSelling && topSelling.length > 0) { %>
-              <% topSelling.forEach((product, index) => { %>
-                <tr>
-                  <td>
-                    <span style="font-weight: 700; color: <%= index < 3 ? 'var(--warning)' : 'var(--text-muted)' %>; font-size: 1.1rem;">
-                      #<%= index + 1 %>
-                    </span>
-                  </td>
-                  <td>
-                    <div class="product-cell">
-                      <img src="<%= product.thumbnail || '/images/placeholder-product.jpg' %>" alt="">
-                      <div class="info">
-                        <h4><%= product.title %></h4>
-                      </div>
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Top Header -->
+            <header class="top-header">
+                <div class="header-search">
+                    <i class="fas fa-search"></i>
+                    <input type="text" placeholder="Search products, orders...">
+                </div>
+                <div class="header-actions">
+                    <div class="header-icon">
+                        <i class="fas fa-bell"></i>
+                        <% if (typeof newOrdersCount !== 'undefined' && newOrdersCount > 0) { %>
+                        <span class="icon-badge"><%= newOrdersCount %></span>
+                        <% } %>
                     </div>
-                  </td>
-                  <td><%= product.category %></td>
-                  <td class="price-cell">â‚¹<%= product.sellingPrice.toLocaleString('en-IN') %></td>
-                  <td class="sales-cell">
-                    <i class="fas fa-shopping-cart"></i> <%= product.totalSales || 0 %>
-                  </td>
-                  <td class="price-cell">â‚¹<%= (product.totalRevenue || 0).toLocaleString('en-IN') %></td>
-                </tr>
-              <% }) %>
-            <% } else { %>
-              <tr>
-                <td colspan="6" style="text-align: center; padding: 40px; color: var(--text-muted);">
-                  <i class="fas fa-chart-bar" style="font-size: 2rem; display: block; margin-bottom: 10px;"></i>
-                  No sales data yet. Start selling to see your top products here!
-                </td>
-              </tr>
-            <% } %>
-          </tbody>
-        </table>
-      </div>
+                    <div class="user-profile">
+                        <img src="<%= seller.profileImageURL || '/imgs/default.png' %>" alt="Profile">
+                        <div>
+                            <strong><%= seller.fullName || 'Seller' %></strong>
+                            <small><%= seller.businessName || seller.email %></small>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <div class="content-area">
+                <!-- Welcome Section -->
+                <div class="welcome-section">
+                    <div>
+                        <h1>Welcome back, <%= seller.fullName || 'Seller' %>! 👋</h1>
+                        <p>Here's what's happening with your store today.</p>
+                    </div>
+                    <div class="quick-actions">
+                        <a href="/products/seller/add" class="btn btn-primary">
+                            <i class="fas fa-plus"></i> Add Product
+                        </a>
+                        <a href="/seller/orders" class="btn btn-outline">
+                            <i class="fas fa-box"></i> View Orders
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Stats Grid -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon primary">
+                            <i class="fas fa-box"></i>
+                        </div>
+                        <div class="stat-details">
+                            <h3><%= (stats && stats.totalProducts) || 0 %></h3>
+                            <p>Total Products</p>
+                            <span class="stat-trend"><%= (stats && stats.activeProducts) || 0 %> active</span>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-icon success">
+                            <i class="fas fa-rupee-sign"></i>
+                        </div>
+                        <div class="stat-details">
+                            <h3><%= formatCurrency((stats && stats.totalRevenue) || 0) %></h3>
+                            <p>Total Revenue</p>
+                            <span class="stat-trend">Lifetime earnings</span>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-icon warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                        </div>
+                        <div class="stat-details">
+                            <h3><%= (stats && stats.lowStockProducts) || 0 %></h3>
+                            <p>Low Stock</p>
+                            <span class="stat-trend">Needs restock</span>
+                        </div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-icon danger">
+                            <i class="fas fa-times-circle"></i>
+                        </div>
+                        <div class="stat-details">
+                            <h3><%= (stats && stats.outOfStockProducts) || 0 %></h3>
+                            <p>Out of Stock</p>
+                            <span class="stat-trend">Urgent restock</span>
+                        </div>
+                    </div>
+
+                    <% if (typeof wallet !== 'undefined' && wallet) { %>
+                    <div class="stat-card">
+                        <div class="stat-icon info">
+                            <i class="fas fa-wallet"></i>
+                        </div>
+                        <div class="stat-details">
+                            <h3><%= formatCurrency(wallet.availableBalance || 0) %></h3>
+                            <p>Available Balance</p>
+                            <span class="stat-trend"><%= formatCurrency(wallet.pendingBalance || 0) %> pending</span>
+                        </div>
+                    </div>
+                    <% } %>
+
+                    <% if (typeof newOrdersCount !== 'undefined' && newOrdersCount > 0) { %>
+                    <div class="stat-card pulse">
+                        <div class="stat-icon teal">
+                            <i class="fas fa-shopping-cart"></i>
+                        </div>
+                        <div class="stat-details">
+                            <h3><%= newOrdersCount %></h3>
+                            <p>New Orders</p>
+                            <span class="stat-trend"><a href="/seller/orders">Process now →</a></span>
+                        </div>
+                    </div>
+                    <% } %>
+                </div>
+
+                <!-- Charts Row -->
+                <% if ((typeof salesData !== 'undefined' && salesData && salesData.length > 0) || 
+                       (typeof categoryData !== 'undefined' && categoryData && categoryData.length > 0)) { %>
+                <div class="charts-row">
+                    <% if (typeof salesData !== 'undefined' && salesData && salesData.length > 0) { %>
+                    <div class="chart-card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-chart-line"></i> Sales Overview</h3>
+                        </div>
+                        <div class="chart-body">
+                            <canvas id="salesChart"></canvas>
+                        </div>
+                    </div>
+                    <% } %>
+
+                    <% if (typeof categoryData !== 'undefined' && categoryData && categoryData.length > 0) { %>
+                    <div class="chart-card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-chart-pie"></i> Sales by Category</h3>
+                        </div>
+                        <div class="chart-body">
+                            <canvas id="categoryChart"></canvas>
+                        </div>
+                    </div>
+                    <% } %>
+                </div>
+                <% } %>
+
+                <!-- Tables Row -->
+                <div class="tables-row">
+                    <!-- Recent Products -->
+                    <div class="data-card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-clock"></i> Recent Products</h3>
+                            <a href="/products/seller/list" class="link">View All →</a>
+                        </div>
+                        <div class="card-body">
+                            <% if (recentProducts && recentProducts.length > 0) { %>
+                            <div class="table-wrap">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Product</th>
+                                            <th>Price</th>
+                                            <th>Stock Status</th>
+                                            <th>Sales</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <% recentProducts.forEach(product => { %>
+                                        <tr>
+                                            <td>
+                                                <div class="product-info">
+                                                    <img src="<%= product.thumbnail || '/images/placeholder-product.jpg' %>" 
+                                                         alt="<%= product.title %>" class="product-thumb">
+                                                    <div>
+                                                        <strong><%= truncate(product.title, 40) %></strong>
+                                                        <span class="text-muted"><%= product.category || 'Uncategorized' %> | <%= product.productType || 'N/A' %></span>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td><%= formatCurrency(product.sellingPrice) %></td>
+                                            <td>
+                                                <span class="status-badge <%= getStatusBadge(product.stockStatus) %>">
+                                                    <%= product.stockStatus || 'N/A' %>
+                                                </span>
+                                            </td>
+                                            <td><%= product.totalSales || 0 %></td>
+                                        </tr>
+                                        <% }) %>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <% } else { %>
+                            <div class="empty-state">
+                                <i class="fas fa-box-open fa-3x"></i>
+                                <h4>No products yet</h4>
+                                <p>Add your first product to start selling.</p>
+                                <a href="/products/seller/add" class="btn btn-primary">Add Product</a>
+                            </div>
+                            <% } %>
+                        </div>
+                    </div>
+
+                    <!-- Top Selling -->
+                    <div class="data-card">
+                        <div class="card-header">
+                            <h3><i class="fas fa-trophy"></i> Top Selling</h3>
+                            <a href="/products/seller/list" class="link">View All →</a>
+                        </div>
+                        <div class="card-body">
+                            <% if (topSelling && topSelling.length > 0) { %>
+                            <div class="table-wrap">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Rank</th>
+                                            <th>Product</th>
+                                            <th>Category</th>
+                                            <th>Price</th>
+                                            <th>Units</th>
+                                            <th>Revenue</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <% topSelling.forEach((product, index) => { %>
+                                        <tr>
+                                            <td><span class="rank-badge">#<%= index + 1 %></span></td>
+                                            <td>
+                                                <div class="product-info">
+                                                    <img src="<%= product.thumbnail || '/images/placeholder-product.jpg' %>" 
+                                                         alt="<%= product.title %>" class="product-thumb">
+                                                    <strong><%= truncate(product.title, 35) %></strong>
+                                                </div>
+                                            </td>
+                                            <td><%= product.category || 'N/A' %></td>
+                                            <td><%= formatCurrency(product.sellingPrice) %></td>
+                                            <td><%= product.totalSales || 0 %></td>
+                                            <td><%= formatCurrency(product.totalRevenue || 0) %></td>
+                                        </tr>
+                                        <% }) %>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <% } else { %>
+                            <div class="empty-state">
+                                <i class="fas fa-chart-bar fa-3x"></i>
+                                <h4>No sales data yet</h4>
+                                <p>Start selling to see your top products here.</p>
+                            </div>
+                            <% } %>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Stock Alert Banner -->
+                <% if (stats && ((stats.lowStockProducts > 0) || (stats.outOfStockProducts > 0))) { %>
+                <div class="alert-banner warning">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <div>
+                        <strong>Stock Alert:</strong> 
+                        <%= stats.outOfStockProducts || 0 %> product(s) out of stock, 
+                        <%= stats.lowStockProducts || 0 %> running low. 
+                        <a href="/products/seller/stock-alert">Manage inventory →</a>
+                    </div>
+                </div>
+                <% } %>
+            </div>
+        </main>
     </div>
-  </div>
 
-  <script>
-    // ============================================
-    // OPTIMIZED CHARTS - No lag, instant render
-    // ============================================
-
-    (function() {
-      const salesData = <%- JSON.stringify(salesData || []) %>;
-      const labels = salesData.length > 0 ? salesData.map(d => d.label || '') : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      const values = salesData.length > 0 ? salesData.map(d => d.value || 0) : [1200, 1900, 1500, 2200, 1800, 2800, 2400];
-
-      const ctx = document.getElementById('revenueChart');
-      if (!ctx) return;
-
-      new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'Revenue (â‚¹)',
-            data: values,
-            borderColor: '#2874f0',
-            backgroundColor: 'rgba(40,116,240,0.08)',
-            borderWidth: 2,
-            fill: true,
-            tension: 0.4,
-            pointRadius: 0,
-            pointHoverRadius: 4,
-            pointBackgroundColor: '#2874f0'
-          }]
-        },
-        options: {
-          animation: false,
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              backgroundColor: 'rgba(0,0,0,0.8)',
-              padding: 8,
-              cornerRadius: 4,
-              displayColors: false,
-              callbacks: {
-                label: function(context) {
-                  return 'â‚¹' + (context.parsed.y || 0).toLocaleString('en-IN');
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+        // Sales Chart
+        <% if (typeof salesData !== 'undefined' && salesData && salesData.length > 0) { %>
+        const salesCtx = document.getElementById('salesChart').getContext('2d');
+        new Chart(salesCtx, {
+            type: 'line',
+            data: {
+                labels: <%- JSON.stringify(salesData.map(d => d.month || d.label || '')) %>,
+                datasets: [{
+                    label: 'Revenue (₹)',
+                    data: <%- JSON.stringify(salesData.map(d => d.amount || d.revenue || 0)) %>,
+                    borderColor: '#4f46e5',
+                    backgroundColor: 'rgba(79, 70, 229, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#4f46e5'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, grid: { color: 'rgba(0,0,0,0.05)' } },
+                    x: { grid: { display: false } }
                 }
-              }
             }
-          },
-          scales: {
-            y: {
-              beginAtZero: true,
-              grid: { color: 'rgba(0,0,0,0.05)' },
-              ticks: {
-                callback: function(value) { return 'â‚¹' + (value / 1000) + 'k'; },
-                font: { size: 10 },
-                maxTicksLimit: 5
-              }
+        });
+        <% } %>
+
+        // Category Chart
+        <% if (typeof categoryData !== 'undefined' && categoryData && categoryData.length > 0) { %>
+        const catCtx = document.getElementById('categoryChart').getContext('2d');
+        new Chart(catCtx, {
+            type: 'doughnut',
+            data: {
+                labels: <%- JSON.stringify(categoryData.map(d => d.name || d.category || '')) %>,
+                datasets: [{
+                    data: <%- JSON.stringify(categoryData.map(d => d.amount || d.value || 0)) %>,
+                    backgroundColor: ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4'],
+                    borderWidth: 0
+                }]
             },
-            x: {
-              grid: { display: false },
-              ticks: { font: { size: 10 }, maxTicksLimit: 6 }
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '70%',
+                plugins: {
+                    legend: { position: 'bottom', labels: { usePointStyle: true, padding: 15 } }
+                }
             }
-          }
-        }
-      });
-    })();
-
-    (function() {
-      const categoryData = <%- JSON.stringify(categoryData || []) %>;
-      const catLabels = categoryData.length > 0 ? categoryData.map(c => c.name || '') : ['T-Shirt', 'Shirt', 'Kurta', 'Jeans', 'Other'];
-      const catValues = categoryData.length > 0 ? categoryData.map(c => c.value || 0) : [35, 25, 20, 15, 5];
-
-      const ctx = document.getElementById('categoryChart');
-      if (!ctx) return;
-
-      new Chart(ctx, {
-        type: 'doughnut',
-        data: {
-          labels: catLabels,
-          datasets: [{
-            data: catValues,
-            backgroundColor: ['#2874f0', '#388e3c', '#f9a825', '#d32f2f', '#0288d1'],
-            borderWidth: 0,
-            hoverOffset: 2
-          }]
-        },
-        options: {
-          animation: false,
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: {
-              position: 'bottom',
-              labels: {
-                padding: 10,
-                usePointStyle: true,
-                pointStyle: 'circle',
-                font: { size: 10 },
-                boxWidth: 8
-              }
-            },
-            tooltip: {
-              backgroundColor: 'rgba(0,0,0,0.8)',
-              padding: 8,
-              cornerRadius: 4,
-              displayColors: false
-            }
-          },
-          cutout: '70%'
-        }
-      });
-    })();
-  </script>
-
+        });
+        <% } %>
+    </script>
 </body>
 </html>
