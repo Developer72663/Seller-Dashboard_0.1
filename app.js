@@ -11,15 +11,16 @@ const rateLimit = require('express-rate-limit');
 const passport = require('passport');
 const multer = require('multer');
 const fs = require('fs');
+const helmet = require('helmet');
+const cors = require('cors');
 
-// Try to load node-cron, fallback gracefully if not installed
+// Try to load node-cron
 let cron = null;
 try {
   cron = require('node-cron');
   console.log('✅ node-cron loaded');
 } catch (err) {
-  console.warn('⚠️ node-cron not installed. Daily funds release job will not run automatically.');
-  console.warn('   Run: npm install node-cron');
+  console.warn('⚠️ node-cron not installed');
 }
 
 // Try to load release funds job
@@ -29,11 +30,20 @@ try {
   releaseFundsJob = releaseModule.releaseFundsJob;
   console.log('✅ Release funds job loaded');
 } catch (err) {
-  console.warn('⚠️ Release funds job not available:', err.message);
+  console.warn('⚠️ Release funds job not available');
 }
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// ═══════════════════════════════════════════════════
+// SECURITY MIDDLEWARE
+// ═══════════════════════════════════════════════════
+app.use(helmet());
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS || 'http://localhost:3000',
+  credentials: true
+}));
 
 // ═══════════════════════════════════════════════════
 // RATE LIMITING
@@ -44,16 +54,6 @@ const limiter = rateLimit({
   message: 'Too many requests from this IP, please try again later.'
 });
 app.use('/api/', limiter);
-
-// ═══════════════════════════════════════════════════
-// SUPPRESS MONGOOSE WARNINGS
-// ═══════════════════════════════════════════════════
-process.on('warning', (warning) => {
-  if (warning.code === 'MONGOOSE' && warning.message.includes('Duplicate schema index')) {
-    return;
-  }
-  console.warn(warning);
-});
 
 // ═══════════════════════════════════════════════════
 // DATABASE CONNECTION
@@ -86,7 +86,7 @@ app.use(cookieParser());
 app.use(methodOverride('_method'));
 
 // ═══════════════════════════════════════════════════
-// SESSION (for flash messages)
+// SESSION
 // ═══════════════════════════════════════════════════
 app.use(session({
   secret: process.env.SESSION_SECRET || 'shopp123-super-secret-key',
@@ -95,7 +95,8 @@ app.use(session({
   cookie: {
     maxAge: 1000 * 60 * 60 * 24 * 7,
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production'
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict'
   }
 }));
 
@@ -110,7 +111,7 @@ app.use(passport.initialize());
 app.use(flash());
 
 // ═══════════════════════════════════════════════════
-// JWT AUTH MIDDLEWARE (sets req.seller from cookie)
+// JWT AUTH MIDDLEWARE
 // ═══════════════════════════════════════════════════
 app.use((req, res, next) => {
   const { verifyToken } = require('./services/authentication');
@@ -118,14 +119,21 @@ app.use((req, res, next) => {
 
   if (!token) {
     req.seller = null;
+    req.admin = null;
     return next();
   }
 
   try {
     const decoded = verifyToken(token);
-    req.seller = decoded || null;
+    if (decoded) {
+      req.seller = decoded;
+      if (decoded.role && ['ADMIN', 'SUPER_ADMIN', 'MODERATOR'].includes(decoded.role)) {
+        req.admin = decoded;
+      }
+    }
   } catch (error) {
     req.seller = null;
+    req.admin = null;
   }
   next();
 });
@@ -136,13 +144,15 @@ app.use((req, res, next) => {
 app.use((req, res, next) => {
   res.locals.success_msg = req.flash('success');
   res.locals.error_msg = req.flash('error');
+  res.locals.warning_msg = req.flash('warning');
   res.locals.messages = {
     success: req.flash('success'),
-    error: req.flash('error')
+    error: req.flash('error'),
+    warning: req.flash('warning')
   };
   res.locals.user = req.user || req.session.user || null;
   res.locals.seller = req.seller || null;
-  res.locals.admin = req.session.admin || null;
+  res.locals.admin = req.admin || req.session.admin || null;
   res.locals.currentPath = req.path;
   next();
 });
@@ -160,13 +170,32 @@ app.locals.truncate = function(text, length = 60) {
 app.locals.formatDate = function(date) {
   if (!date) return '';
   return new Date(date).toLocaleDateString('en-US', {
-    year: 'numeric', month: 'short', day: 'numeric'
+    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
   });
 };
 
 app.locals.formatCurrency = function(amount) {
   if (amount === undefined || amount === null) return '₹0';
-  return '₹' + Number(amount).toLocaleString('en-IN');
+  return '₹' + Number(amount).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+};
+
+app.locals.getStatusBadge = function(status) {
+  const badges = {
+    'pending': 'badge-warning',
+    'confirmed': 'badge-info',
+    'processing': 'badge-primary',
+    'shipped': 'badge-primary',
+    'out_for_delivery': 'badge-info',
+    'delivered': 'badge-success',
+    'cancelled': 'badge-danger',
+    'returned': 'badge-secondary',
+    'refunded': 'badge-secondary',
+    'Pending': 'badge-warning',
+    'Approved': 'badge-success',
+    'Rejected': 'badge-danger',
+    'Suspended': 'badge-danger'
+  };
+  return badges[status] || 'badge-secondary';
 };
 
 // ═══════════════════════════════════════════════════
@@ -178,7 +207,8 @@ const uploadDirs = [
   'uploads/products/videos',
   'uploads/products/sizecharts',
   'uploads/sellers/logos',
-  'uploads/sellers/documents'
+  'uploads/sellers/documents',
+  'uploads/delivery/proofs'
 ];
 
 uploadDirs.forEach(dir => {
@@ -193,7 +223,8 @@ const storage = multer.diskStorage({
       video: 'uploads/products/videos/',
       sizeChartImage: 'uploads/products/sizecharts/',
       businessLogo: 'uploads/sellers/logos/',
-      document: 'uploads/sellers/documents/'
+      document: 'uploads/sellers/documents/',
+      proof: 'uploads/delivery/proofs/'
     };
     cb(null, dirMap[file.fieldname] || 'uploads/');
   },
@@ -207,7 +238,7 @@ const fileFilter = (req, file, cb) => {
   const allowedImages = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
   const allowedVideos = ['video/mp4', 'video/webm', 'video/ogg'];
 
-  if (['thumbnail', 'images', 'sizeChartImage', 'businessLogo'].includes(file.fieldname)) {
+  if (['thumbnail', 'images', 'sizeChartImage', 'businessLogo', 'proof'].includes(file.fieldname)) {
     cb(null, allowedImages.includes(file.mimetype));
   } else if (file.fieldname === 'video') {
     cb(null, allowedVideos.includes(file.mimetype));
@@ -225,7 +256,7 @@ const upload = multer({
 app.locals.upload = upload;
 
 // ═══════════════════════════════════════════════════
-// ROUTE LOADING (with fallbacks for missing files)
+// ROUTE LOADING
 // ═══════════════════════════════════════════════════
 
 function safeRequire(routePath, mountPath) {
@@ -234,43 +265,40 @@ function safeRequire(routePath, mountPath) {
     app.use(mountPath, route);
     console.log(`✅ Route loaded: ${mountPath}`);
   } catch (err) {
-    console.warn(`⚠️ Route skipped (not found): ${routePath} — ${err.message}`);
+    console.warn(`⚠️ Route skipped: ${routePath} — ${err.message}`);
   }
 }
 
-// ─── Seller Google Auth (MUST come before regular seller routes) ───
+// Seller Routes
 safeRequire('./routes/SellerGoogleAuth', '/seller');
-
-// ─── Seller Routes (signin, signup, dashboard, orders, etc.) ───
 safeRequire('./routes/Seller', '/seller');
-
-// ─── Earnings Routes ───
 safeRequire('./routes/earnings', '/seller/earnings');
-
-// ─── Settings Routes ───
 safeRequire('./routes/settings', '/seller/settings');
+safeRequire('./routes/product', '/seller/products');
+safeRequire('./routes/sellerOrders', '/seller/orders');
 
-// ─── Admin Routes ───
+// Admin Routes
 safeRequire('./routes/Admin', '/admin');
+safeRequire('./routes/adminDashboard', '/admin/dashboard');
+safeRequire('./routes/adminSellers', '/admin/sellers');
+safeRequire('./routes/adminOrders', '/admin/orders');
+safeRequire('./routes/adminDelivery', '/admin/delivery');
 
-// ─── Product Routes ───
-safeRequire('./routes/product', '/products');
+// Delivery Boy Routes
+safeRequire('./routes/deliveryBoy', '/delivery');
+safeRequire('./routes/deliveryOrders', '/delivery/orders');
 
-// ─── Customer Order Routes (NEW) ───
+// Customer Routes
 safeRequire('./routes/customerOrder', '/orders');
-
-// ─── Optional routes (uncomment when ready) ───
-// safeRequire('./routes/index', '/');
-// safeRequire('./routes/auth', '/auth');
-// safeRequire('./routes/cart', '/cart');
 
 // ═══════════════════════════════════════════════════
 // HOME / LANDING PAGE
 // ═══════════════════════════════════════════════════
 app.get('/', (req, res) => {
   res.render('home', {
-    title: 'SellerHub',
-    seller: req.seller || null
+    title: 'Shopp123 - Seller Dashboard',
+    seller: req.seller || null,
+    admin: req.admin || null
   });
 });
 
@@ -278,11 +306,28 @@ app.get('/', (req, res) => {
 // HEALTH CHECK
 // ═══════════════════════════════════════════════════
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
 });
 
 // ═══════════════════════════════════════════════════
-// ERROR HANDLING
+// CRON JOB: RELEASE FUNDS
+// ═══════════════════════════════════════════════════
+if (cron && releaseFundsJob) {
+  cron.schedule('0 0 * * *', () => {
+    console.log('⏰ Running daily funds release job...');
+    releaseFundsJob().catch(err => {
+      console.error('❌ Funds release job failed:', err.message);
+    });
+  });
+  console.log('✅ Daily funds release cron scheduled (midnight)');
+}
+
+// ═══════════════════════════════════════════════════
+// ERROR HANDLING MIDDLEWARE
 // ═══════════════════════════════════════════════════
 app.use((err, req, res, next) => {
   console.error('🚨 Error:', err);
@@ -296,10 +341,18 @@ app.use((err, req, res, next) => {
     return res.redirect('back');
   }
 
-  const statusCode = err.status || 500;
+  const statusCode = err.status || err.statusCode || 500;
   const errorMessage = process.env.NODE_ENV === 'production'
     ? 'Something went wrong!'
     : (err.message || 'An unexpected error occurred');
+
+  if (req.accepts('json')) {
+    return res.status(statusCode).json({
+      success: false,
+      message: errorMessage,
+      ...(process.env.NODE_ENV === 'development' && { error: err })
+    });
+  }
 
   res.status(statusCode).render('error', {
     title: 'Error',
@@ -316,22 +369,6 @@ app.use((req, res) => {
     message: 'The page you are looking for does not exist.'
   });
 });
-
-// ═══════════════════════════════════════════════════
-// CRON JOB: RELEASE FUNDS AFTER RETURN POLICY ENDS
-// Runs every day at midnight (00:00)
-// ═══════════════════════════════════════════════════
-if (cron && releaseFundsJob) {
-  cron.schedule('0 0 * * *', () => {
-    console.log('⏰ Running daily funds release job...');
-    releaseFundsJob().catch(err => {
-      console.error('❌ Funds release job failed:', err.message);
-    });
-  });
-  console.log('✅ Daily funds release cron scheduled (midnight)');
-} else {
-  console.log('⚠️ Funds release cron NOT scheduled. Install node-cron to enable.');
-}
 
 // ═══════════════════════════════════════════════════
 // START SERVER
