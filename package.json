@@ -1,22 +1,25 @@
 {
-  "name": "blogify-auth",
-  "version": "1.0.0",
-  "description": "Shopp123 E-Commerce Platform",
+  "name": "shopp123-admin-seller-dashboard",
+  "version": "2.0.0",
+  "description": "Production-ready Admin & Seller Dashboard for E-Commerce Platform",
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
     "dev": "nodemon app.js",
-    "release-funds": "node jobs/releaseFunds.js"
+    "release-funds": "node jobs/releaseFunds.js",
+    "seed-admin": "node scripts/seedAdmin.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
     "connect-flash": "^0.1.1",
     "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "ejs": "^3.1.10",
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "express-session": "^1.17.3",
+    "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
     "method-override": "^3.0.0",
     "mongoose": "^8.14.0",

@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const transactionSchema = new mongoose.Schema({
   type: {
     type: String,
-    enum: ['credit', 'debit', 'payout_request', 'payout_approved', 'payout_rejected', 'refund', 'adjustment'],
+    enum: ['credit', 'debit', 'payout_request', 'payout_approved', 'payout_rejected', 'refund', 'adjustment', 'charge'],
     required: true
   },
   order: {
@@ -18,21 +18,20 @@ const transactionSchema = new mongoose.Schema({
     enum: ['pending', 'completed', 'failed', 'cancelled'],
     default: 'completed'
   },
-  // For payout requests
   payoutMethod: {
     type: { type: String, enum: ['bank_transfer', 'upi'], default: 'bank_transfer' },
     bankAccountNumber: { type: String, default: '' },
     bankIfsc: { type: String, default: '' },
     upiId: { type: String, default: '' }
   },
-  // Admin who processed
   processedBy: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Seller',
+    ref: 'Admin',
     default: null
   },
   processedAt: { type: Date },
-  rejectionReason: { type: String, default: '' }
+  rejectionReason: { type: String, default: '' },
+  reference: { type: String, default: '' }
 }, { timestamps: true });
 
 const walletSchema = new mongoose.Schema({
@@ -69,9 +68,16 @@ const walletSchema = new mongoose.Schema({
     bankName: { type: String, default: '' },
     upiId: { type: String, default: '' },
     preferredMethod: { type: String, enum: ['bank_transfer', 'upi'], default: 'bank_transfer' }
-  }
+  },
+
+  // Last payout
+  lastPayoutDate: { type: Date },
+  lastPayoutAmount: { type: Number, default: 0 }
 
 }, { timestamps: true });
+
+walletSchema.index({ seller: 1 });
+walletSchema.index({ 'transactions.createdAt': -1 });
 
 // Methods
 walletSchema.methods.addTransaction = async function(type, amount, description, options = {}) {
@@ -83,7 +89,8 @@ walletSchema.methods.addTransaction = async function(type, amount, description, 
     status: options.status || 'completed',
     payoutMethod: options.payoutMethod || undefined,
     processedBy: options.processedBy || null,
-    processedAt: options.processedAt || null
+    processedAt: options.processedAt || null,
+    reference: options.reference || ''
   };
 
   this.transactions.push(transaction);
@@ -97,6 +104,8 @@ walletSchema.methods.addTransaction = async function(type, amount, description, 
   } else if (type === 'refund') {
     this.availableBalance -= amount;
     this.totalRefunded += amount;
+  } else if (type === 'charge') {
+    this.availableBalance -= amount;
   }
 
   await this.save();
@@ -114,7 +123,6 @@ walletSchema.methods.requestPayout = async function(amount, payoutMethod) {
     throw new Error('Insufficient balance');
   }
 
-  // Lock the amount (move from available to pending in transaction)
   this.availableBalance -= amount;
 
   const transaction = {

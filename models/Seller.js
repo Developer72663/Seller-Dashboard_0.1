@@ -53,17 +53,40 @@ const SellerSchema = new Schema({
     default: 'Pending'
   },
   isGoogleUser: { type: Boolean, default: false },
-  approvedBy: { type: Schema.Types.ObjectId, ref: 'Seller', default: null },
+  approvedBy: { type: Schema.Types.ObjectId, ref: 'Admin', default: null },
   approvedAt: { type: Date, default: null },
   rejectedAt: { type: Date, default: null },
   rejectionReason: { type: String, default: '' },
 
-  // Stats (auto-updated)
+  // Performance Metrics
   totalIncome: { type: Number, default: 0 },
   totalProducts: { type: Number, default: 0 },
   totalOrders: { type: Number, default: 0 },
   totalCustomers: { type: Number, default: 0 },
-  rating: { type: Number, default: 0 },
+  rating: { type: Number, default: 0, min: 0, max: 5 },
+  totalReviews: { type: Number, default: 0 },
+
+  // Analytics
+  monthlyRevenue: [{
+    month: Date,
+    amount: Number,
+    orders: Number
+  }],
+  successfulOrders: { type: Number, default: 0 },
+  cancelledOrders: { type: Number, default: 0 },
+  returnedOrders: { type: Number, default: 0 },
+  averageOrderValue: { type: Number, default: 0 },
+  averageProcessingTime: { type: Number, default: 0 },
+
+  // Account Status
+  status: {
+    type: String,
+    enum: ['active', 'inactive', 'suspended'],
+    default: 'active'
+  },
+  suspensionReason: { type: String, default: '' },
+  suspendedAt: { type: Date },
+  suspendedBy: { type: Schema.Types.ObjectId, ref: 'Admin' },
 
   // Soft delete
   isDeleted: { type: Boolean, default: false },
@@ -75,6 +98,8 @@ SellerSchema.index({ email: 1 });
 SellerSchema.index({ verificationStatus: 1 });
 SellerSchema.index({ googleId: 1 });
 SellerSchema.index({ createdAt: -1 });
+SellerSchema.index({ rating: -1 });
+SellerSchema.index({ status: 1 });
 
 // Password hashing
 SellerSchema.pre('save', async function (next) {
